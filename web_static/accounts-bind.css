@@ -1,0 +1,31 @@
+.binding-guide{display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:12px 16px;border:1px solid #e2e7ff;border-radius:9px;background:#f7f8ff;color:#68728b;font-size:11px}
+.binding-guide span{width:22px;height:22px;display:grid;place-items:center;border-radius:50%;background:#667eea;color:#fff;font-weight:700}
+.binding-guide b{font-weight:600;color:#566078}.binding-guide i{color:#b0b7c7;font-style:normal;margin:0 5px}
+.account-platform-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.account-platform{min-width:0;padding:16px;border:1px solid #e2e5ed;border-radius:11px;background:#fbfcff}
+.account-platform>header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.account-platform>header .platform-logo{width:39px;height:39px;flex:0 0 auto;border-radius:10px}
+.account-platform>header strong{display:block;color:#343a49;font-size:14px}.account-platform>header small{display:block;margin-top:2px;color:#999fac;font-size:10px}
+.account-platform>header em{margin-left:auto;padding:4px 8px;border-radius:14px;background:#eef0f7;color:#778093;font-size:9px;font-style:normal}
+.new-account-row{display:flex;gap:8px}.new-account-row .form-control{min-width:0;padding:8px 10px;font-size:11px}
+.bind-btn{flex:none;border:1px solid #aeb9ef;border-radius:7px;background:#f0f2ff;color:#586fdc;padding:8px 12px;font-size:10px;font-weight:700;transition:.2s}
+.bind-btn:hover{background:#e7ebff;border-color:#8798e9}.bind-btn:disabled{cursor:wait;opacity:.58}
+.binding-progress{margin-top:10px;padding:9px 11px;border:1px solid #ecd39c;border-radius:8px;background:#fffaf0}
+.binding-progress[hidden]{display:none}.binding-progress b{display:block;color:#9b6815;font-size:10px}.binding-progress span{display:block;margin-top:2px;color:#a78856;font-size:9px;line-height:1.45}
+.bound-account-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.empty-account-list{padding:17px;border:1px dashed #d9dde7;border-radius:8px;color:#a1a7b3;text-align:center;font-size:10px;background:#fff}
+.bound-account{display:grid;grid-template-columns:42px minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:10px;border:1px solid #e5e8ef;border-radius:9px;background:#fff}
+.account-avatar{position:relative;width:42px;height:42px;display:grid;place-items:center;overflow:hidden;border-radius:50%;background:linear-gradient(135deg,#dfe4ff,#eee7ff);color:#6571ae;font-size:15px;font-weight:700}
+.account-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.account-avatar.has-image b{visibility:hidden}
+.account-identity{min-width:0}.account-identity strong{display:block;overflow:hidden;color:#3d4351;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.account-identity span{display:block;margin-top:3px;overflow:hidden;color:#979eab;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.saved-state{padding:3px 7px;border-radius:12px;background:#e8f8ef;color:#2e8a5d;font-size:9px;white-space:nowrap}.saved-state.invalid{background:#fdecef;color:#b54b5b}
+.account-item-actions{display:flex;gap:5px}.account-item-actions button{border:1px solid #dfe2e9;border-radius:6px;background:#fff;padding:5px 7px;color:#707887;font-size:9px}
+.account-item-actions .rebind-account{border-color:#c4cdf2;color:#6174d6;background:#f8f9ff}.account-item-actions .remove-account{color:#b35a67}
+.account-privacy-note{margin-top:15px;padding:11px 13px;border-radius:8px;background:#f3f7ff;color:#76839b;font-size:10px}
+.xhs-risk-modal{position:fixed;inset:0;z-index:2300;display:grid;place-items:center;padding:20px;background:rgba(28,31,39,.44);backdrop-filter:blur(3px)}
+.xhs-risk-modal[hidden]{display:none}.xhs-risk-dialog{display:grid;width:min(430px,100%);grid-template-columns:42px minmax(0,1fr);gap:12px;padding:20px;border:1px solid #e4e7ee;border-radius:14px;background:#fff;box-shadow:0 24px 70px rgba(22,29,45,.25)}
+.xhs-risk-icon{display:grid;width:42px;height:42px;place-items:center;border-radius:11px;background:#fff3dd;color:#b87612;font-size:20px;font-weight:800}.xhs-risk-copy h2{margin:1px 0 7px;color:#343a48;font-size:15px}.xhs-risk-copy p{margin:0;color:#747c8c;font-size:11px;line-height:1.7}
+.xhs-risk-dialog footer{display:flex;grid-column:2;justify-content:flex-end;gap:8px;margin-top:5px}.xhs-risk-dialog footer button{min-width:78px;padding:8px 12px;border:1px solid #dfe2e9;border-radius:7px;background:#fff;color:#697181;font-size:10px;font-weight:650}.xhs-risk-dialog footer button:last-child{border-color:#d99a34;background:#d99a34;color:#fff}.xhs-risk-dialog footer button:last-child:hover{background:#c98a27}.xhs-risk-open{overflow:hidden}
+@media(max-width:1000px){.account-platform-list{grid-template-columns:1fr}}
+@media(max-width:760px){.binding-guide{align-items:flex-start;flex-wrap:wrap}.binding-guide i{display:none}.bound-account{grid-template-columns:42px minmax(0,1fr) auto}.saved-state{display:none}.account-item-actions{grid-column:2/4}}

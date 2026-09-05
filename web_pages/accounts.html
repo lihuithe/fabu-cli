@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>平台账号 - 自动化发布工具</title>
+  <link href="/static/app-icon.png" rel="icon" type="image/png">
+  <link href="/static/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/multi.css" rel="stylesheet">
+  <link href="/static/accounts-bind.css" rel="stylesheet">
+</head>
+<body data-page="accounts">
+  <script src="/static/core-shell.js"></script>
+  <main class="page-shell">
+    <div class="content-width">
+      <div class="page-title-row">
+        <div><h1>平台账号</h1><p>每个平台可绑定多个账号，登录成功后自动保存头像、昵称和独立登录状态</p></div>
+        <a class="secondary-btn" href="/publish">前往视频发布</a>
+      </div>
+      <div class="binding-guide"><span>1</span><b>选择平台并扫码登录</b><i>→</i><span>2</span><b>自动采集真实昵称与头像</b><i>→</i><span>3</span><b>发布时按账号自由多选</b></div>
+      <section class="panel">
+        <div class="panel-head"><div><span class="section-icon purple">▦</span><h2>多账号列表</h2></div><span class="section-tip">每个账号保存为互不覆盖的独立登录状态</span></div>
+        <div class="account-platform-list">
+          <article class="account-platform" data-key="douyin">
+            <header><span class="platform-logo douyin">抖</span><div><strong>抖音</strong><small>抖音创作者中心</small></div><em data-count>0 个账号</em></header>
+            <div class="new-account-row"><input class="form-control account-remark" placeholder="可选备注，例如：品牌主账号"><button class="bind-btn add-account" type="button">＋ 绑定新账号</button></div>
+            <div class="binding-progress" hidden><b>等待扫码</b><span></span></div>
+            <div class="bound-account-list"></div>
+          </article>
+          <article class="account-platform" data-key="xiaohongshu">
+            <header><span class="platform-logo xhs">小</span><div><strong>小红书</strong><small>小红书创作服务平台</small></div><em data-count>0 个账号</em></header>
+            <div class="new-account-row"><input class="form-control account-remark" placeholder="可选备注，例如：生活分享号"><button class="bind-btn add-account" type="button">＋ 绑定新账号</button></div>
+            <div class="binding-progress" hidden><b>等待扫码</b><span></span></div>
+            <div class="bound-account-list"></div>
+          </article>
+          <article class="account-platform" data-key="channels">
+            <header><span class="platform-logo channels">视</span><div><strong>视频号</strong><small>视频号助手</small></div><em data-count>0 个账号</em></header>
+            <div class="new-account-row"><input class="form-control account-remark" placeholder="可选备注，例如：企业视频号"><button class="bind-btn add-account" type="button">＋ 绑定新账号</button></div>
+            <div class="binding-progress" hidden><b>等待扫码</b><span></span></div>
+            <div class="bound-account-list"></div>
+          </article>
+          <article class="account-platform" data-key="bilibili">
+            <header><span class="platform-logo bili">B</span><div><strong>B站</strong><small>哔哩哔哩创作中心</small></div><em data-count>0 个账号</em></header>
+            <div class="new-account-row"><input class="form-control account-remark" placeholder="可选备注，例如：知识分享号"><button class="bind-btn add-account" type="button">＋ 绑定新账号</button></div>
+            <div class="binding-progress" hidden><b>等待扫码</b><span></span></div>
+            <div class="bound-account-list"></div>
+          </article>
+        </div>
+        <div class="account-privacy-note">账号头像、昵称与登录状态只保存在当前电脑；程序不会读取或保存账号密码。</div>
+      </section>
+    </div>
+  </main>
+  <div class="xhs-risk-modal" id="xhsRiskModal" hidden>
+    <section class="xhs-risk-dialog" role="alertdialog" aria-modal="true" aria-labelledby="xhsRiskTitle" aria-describedby="xhsRiskDescription">
+      <span class="xhs-risk-icon" aria-hidden="true">!</span>
+      <div class="xhs-risk-copy"><h2 id="xhsRiskTitle">小红书账号风控风险提示</h2><p id="xhsRiskDescription">小红书平台存在账号风控风险，不建议使用本工具登录或发布。如果仍要继续，请自行承担可能发生的账号限制、验证或封禁等风险。</p></div>
+      <footer><button id="xhsRiskCancel" type="button">取消</button><button id="xhsRiskContinue" type="button">了解风险，继续</button></footer>
+    </section>
+  </div>
+  <script src="/static/accounts.js"></script>
+</body>
+</html>

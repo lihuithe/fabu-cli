@@ -1,0 +1,40 @@
+.image-text-grid{grid-template-columns:minmax(0,1fr);gap:18px}
+.image-column{min-width:0;display:flex;flex-direction:column}
+.image-editor-heading{display:flex;align-items:center;gap:9px;margin-bottom:10px;line-height:1}
+.image-editor-heading .field-label{margin:0;color:#252a35;font-size:13px}
+.image-editor-heading>span{color:#969dab;font-size:10px;font-weight:400}
+.image-drop{position:relative;height:auto;min-height:86px;padding:0;overflow:visible;flex:none;border:0;background:transparent;transition:.18s}
+.image-drop.has-images{height:auto;min-height:86px;padding:0;border:0;background:transparent}
+.image-drop.is-dragging{border-radius:8px;background:#eef1ff;box-shadow:0 0 0 7px #eef1ff}
+.image-drop>input{position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}
+.image-empty-state{width:86px;height:86px;min-height:86px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:1px solid #edf0f5;border-radius:8px;background:#f5f6f8;color:#a5aab5;text-align:center;cursor:pointer;transition:.18s}
+.image-empty-state[hidden],.image-preview-state[hidden]{display:none!important}
+.image-empty-state:hover{border-color:#c6ccdf;background:#f0f1f5;color:#7d86a1}
+.image-empty-state>span{font-size:30px;font-weight:300;line-height:1}
+.image-preview-state{min-height:0;display:block}
+.image-preview-strip{min-width:0;min-height:0;display:flex;flex-wrap:wrap;align-content:flex-start;align-items:flex-start;gap:9px;overflow:visible;padding:0}
+.image-add-tile{width:86px;height:86px;min-width:86px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0;border:1px solid #edf0f5;border-radius:8px;background:#f5f6f8;color:#a5aab5;transition:.18s}
+.image-add-tile span{font-size:30px;font-weight:300;line-height:1}
+.image-add-tile small{font-size:9px;opacity:0;transform:translateY(3px);transition:.18s}
+.image-add-tile:hover{border-color:#aeb9f0;background:#f1f3ff;color:#667eea}
+.image-add-tile:hover small,.image-add-tile:focus-visible small{opacity:1;transform:none}
+.image-preview-grid{display:contents}
+.image-preview-card{position:relative;width:86px;height:86px;min-width:86px;overflow:hidden;border:1px solid #e1e4ed;border-radius:7px;background:#eef0f5}
+.image-preview-card img{width:100%;height:100%;display:block;object-fit:cover}
+.image-preview-order{position:absolute;left:0;top:0;min-width:20px;height:20px;display:grid;place-items:center;padding:0 5px;border-radius:6px 0 6px 0;background:rgba(79,84,95,.72);color:#fff;font-size:10px;font-weight:600}
+.image-preview-remove{position:absolute;right:4px;top:4px;width:19px;height:19px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;background:rgba(31,36,48,.7);color:#fff;font-size:13px;line-height:1;opacity:0;transition:.16s}
+.image-preview-card:hover .image-preview-remove,.image-preview-remove:focus-visible{opacity:1}
+.image-preview-remove:hover{background:#c64d5f}
+.image-preview-actions{display:none}
+.image-preview-actions span{color:#687080;font-size:10px}
+.image-text-account-groups{grid-template-columns:repeat(3,minmax(0,1fr))}
+.image-text-account-groups .publish-account-list{grid-template-columns:1fr}
+#imageTextContent{height:108px;min-height:96px;max-height:150px;resize:vertical;line-height:1.55;flex:none}
+.image-text-declaration-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.image-text-setting-options .original-option.inactive{cursor:not-allowed;background:#f5f6f8;filter:grayscale(1);opacity:.55}
+.image-text-setting-options .original-option:not(.inactive){border-color:#d9def2;background:#fbfbff}
+.image-text-schedule-panel .schedule-card{grid-template-columns:minmax(220px,.8fr) minmax(520px,1.8fr)}
+@media(max-width:1100px){.image-text-account-groups{grid-template-columns:1fr}.image-text-schedule-panel .schedule-card{grid-template-columns:1fr}.image-text-schedule-panel .schedule-fields{padding-top:14px;border-top:1px solid #e7e9f0}}
+@media(max-width:900px){.image-empty-state{min-height:86px}.image-text-declaration-grid{grid-template-columns:1fr}}
+@media(max-width:700px){.image-text-setting-options{grid-template-columns:1fr}.image-text-schedule-panel .schedule-fields{grid-template-columns:1fr}}
+@media(max-width:520px){.image-add-tile,.image-preview-card{width:76px;height:76px;min-width:76px}.image-drop,.image-drop.has-images{min-height:76px}.image-preview-actions span{max-width:240px}}

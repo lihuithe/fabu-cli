@@ -1,0 +1,17 @@
+node_modules/
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log
+.fabu/
+.build/
+dist/
+task_files/*
+!task_files/.gitkeep
+account_data/
+client_data/
+php-api/config.local.php
+npm-debug.log*
+cover_failure_*.png
+cover_failure_*.html

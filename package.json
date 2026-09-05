@@ -1,0 +1,34 @@
+{
+  "name": "multi-platform-video-publisher-node",
+  "version": "2.1.8",
+  "private": true,
+  "author": "Publish Ready",
+  "description": "视频与图文发布 Web 工作台及面向 Agent 的本地 CLI",
+  "type": "module",
+  "main": "scripts/start-web.js",
+  "scripts": {
+    "start": "node scripts/start-web.js",
+    "dev": "node --watch scripts/start-web.js",
+    "check": "node scripts/check.js",
+    "test": "node scripts/run-tests.js",
+    "serve": "node server.js",
+    "cli": "node bin/fabu.js"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "commander": "^15.0.0",
+    "express": "^5.1.0",
+    "luxon": "^3.7.2",
+    "multer": "^2.0.2",
+    "open": "^10.2.0",
+    "playwright": "^1.54.2",
+    "proper-lockfile": "^4.1.2",
+    "zod": "^4.5.4"
+  },
+  "bin": {
+    "fabu": "bin/fabu.js"
+  }
+}

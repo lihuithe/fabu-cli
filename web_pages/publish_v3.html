@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>发布Ready - 自动化发布工具</title>
+  <link href="/static/app-icon.png" rel="icon" type="image/png">
+  <link href="/static/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/platform-link.css" rel="stylesheet">
+</head>
+<body data-page="publish">
+  <script src="/static/core-shell.js"></script>
+  <main class="page-shell"><div class="content-width">
+    <div class="page-title-row"><div><h1>发布Ready</h1><p>使用预先绑定的账号，为所选平台并行打开独立 Chrome 窗口并填写资料</p></div><a class="secondary-btn manage-account-btn" href="/accounts">管理平台账号</a></div>
+    <form id="publishForm">
+      <section class="panel">
+        <div class="panel-head"><div><span class="flow-number">1</span><h2>上传视频与填写内容</h2></div><div class="panel-head-actions"><button class="clear-publish-btn" id="clearPublishButton" type="button">清空</button><span class="section-tip">先准备本次发布内容</span></div></div>
+        <div class="publish-grid">
+          <div class="video-column">
+            <label class="field-label">视频文件 <em>*</em></label>
+            <div class="video-drop compact-drop" id="videoDrop">
+              <input id="video" name="video" type="file" accept="video/*" required>
+              <label class="video-empty-state" id="videoEmptyState" for="video"><span class="drop-icon">↑</span><strong>点击或拖拽上传视频文件</strong><small>将视频拖到此处，支持 MP4、MOV、AVI、MKV、WebM</small><span class="file-name" id="videoName">尚未选择文件</span></label>
+              <div class="video-preview-state" id="videoPreviewState" hidden><video id="videoPreview" controls muted autoplay playsinline preload="metadata"></video><div class="video-preview-meta"><span id="videoPreviewName">尚未选择文件</span><button type="button" id="changeVideo">更换视频</button></div></div>
+            </div>
+          </div>
+          <div class="publish-fields">
+            <div class="common-title-heading"><label class="field-label" for="title">通用标题 <span id="titleCount">0 / 100</span></label><button class="platform-title-trigger" id="openPlatformTitles" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M4 12h10M4 17.5h7"/><path d="m17 15 3 3-3 3M20 18h-6"/></svg><span>自定义平台标题</span></button></div>
+            <input class="form-control" id="title" name="title" maxlength="100" placeholder="默认用于所有平台，也可以单独自定义">
+            <p class="platform-title-summary" id="platformTitleSummary">默认使用通用标题</p>
+            <div class="topic-input-grid">
+              <div class="topic-input-field fixed-topic-field"><label class="field-label" for="fixedTopic">固定标签</label><input class="form-control" id="fixedTopic" name="fixed_topic" placeholder="如：小黑日报助手"><small class="topic-field-hint">长期保留 · 发布时排第一</small></div>
+              <div class="topic-input-field"><label class="field-label" for="topics">本次话题 / 标签</label><input class="form-control" id="topics" name="topics" placeholder="如：#AI工具 #视频剪辑 #效率提升"></div>
+            </div>
+            <label class="field-label">简介 <span id="introCount">0 / 1000</span></label><textarea class="form-control" id="intro" name="content" rows="7" maxlength="1000" placeholder="请输入作品简介；视频号不会使用此简介"></textarea>
+          </div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><div><span class="flow-number">2</span><h2>选择本次发布账号</h2></div><span class="section-tip">同一平台可同时勾选多个账号</span></div>
+        <div class="publish-account-groups" id="accountTargetList"><div class="account-list-loading">正在读取已绑定账号…</div></div>
+        <div class="manual-note"><b>按账号选择 · 全部并行执行</b><span>每个勾选的账号会使用自己的独立登录状态，并打开一个独立 Chrome 窗口；默认停留在发布准备页，可为指定平台开启直接发布。</span></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><div><span class="flow-number">3</span><h2>上传封面与选择声明</h2></div><span class="section-tip">封面选填，不上传则使用平台默认封面</span></div>
+        <div class="cover-grid">
+          <label class="cover-card" data-ratio="3:4"><span class="ratio-preview vertical"><b>3:4</b></span><strong>竖版封面</strong><small class="cover-use">用于：抖音、竖屏小红书、视频号</small><input name="cover_3_4" type="file" accept="image/*"><span class="choose-cover">选择图片</span><span class="cover-required">选填</span><button type="button" class="remove-cover" aria-label="删除 3:4 封面" hidden>删除封面</button></label>
+          <label class="cover-card" data-ratio="4:3"><span class="ratio-preview landscape"><b>4:3</b></span><strong>横版封面</strong><small class="cover-use">用于：抖音、横屏小红书、横屏视频号、B站</small><input name="cover_4_3" type="file" accept="image/*"><span class="choose-cover">选择图片</span><span class="cover-required">选填</span><button type="button" class="remove-cover" aria-label="删除 4:3 封面" hidden>删除封面</button></label>
+          <label class="cover-card" data-ratio="16:9"><span class="ratio-preview wide"><b>16:9</b></span><strong>宽屏封面</strong><small class="cover-use">用于：B站</small><input name="cover_16_9" type="file" accept="image/*"><span class="choose-cover">选择图片</span><span class="cover-required">选填</span><button type="button" class="remove-cover" aria-label="删除 16:9 封面" hidden>删除封面</button></label>
+        </div>
+        <div class="cover-map-note"><b>平台封面规则（整套选填）</b><span>抖音：3:4 + 4:3</span><span>小红书：横屏 4:3 / 竖屏 3:4</span><span>视频号：横屏 3:4 + 4:3 / 竖屏 3:4</span><span>B站：4:3 + 16:9</span></div>
+        <div class="declaration-section">
+          <div class="declaration-heading"><div><strong>平台内容声明</strong><small>每个平台使用各自的声明名称与选项</small></div></div>
+          <div class="declaration-grid">
+            <div class="declaration-card" data-platform="douyin"><div class="declaration-title"><span class="platform-logo douyin">抖</span><div><strong>抖音</strong><small>自主声明</small></div></div><select class="form-select" name="declaration_douyin" aria-label="抖音自主声明"><option>无需添加自主声明</option><option>内容由AI生成</option><option>内容为个人观点或见解</option><option>内容为转载信息</option><option>内容含营销推广信息</option><option>虚构演绎，仅供娱乐</option></select></div>
+            <div class="declaration-card" data-platform="xiaohongshu"><div class="declaration-title"><span class="platform-logo xhs">小</span><div><strong>小红书</strong><small>添加内容类型声明</small></div></div><select class="form-select" name="declaration_xiaohongshu" aria-label="小红书内容类型声明"><option>无需内容标注</option><option>虚构演绎，仅供娱乐</option><option>笔记含AI合成内容</option><option>内容包含营销广告</option><option>内容来源声明</option></select></div>
+            <div class="declaration-card" data-platform="channels"><div class="declaration-title"><span class="platform-logo channels">视</span><div><strong>视频号</strong><small>内容标注</small></div></div><select class="form-select" name="declaration_channels" aria-label="视频号内容标注"><option>无需标注</option><option>含AI生成内容</option><option>内容为虚构剧情，仅供娱乐</option><option>个人观点，仅供参考</option><option>内容包含营销广告</option><option>内容为自行拍摄</option></select></div>
+            <div class="declaration-card" data-platform="bilibili"><div class="declaration-title"><span class="platform-logo bili">B</span><div><strong>B站</strong><small>创作声明</small></div></div><select class="form-select" name="declaration_bilibili" aria-label="B站创作声明"><option>内容无需标注</option><option>含AI生成内容</option><option>含虚构演绎内容</option><option>内容含营销信息</option><option>个人观点，仅供参考</option><option>内容为转载</option></select></div>
+          </div>
+          <div class="publish-setting-options">
+            <label class="original-option" for="originalContent">
+              <input id="originalContent" name="original" type="checkbox" value="true">
+              <span class="original-check" aria-hidden="true">✓</span>
+              <span class="original-option-copy"><strong>小红书声明原创</strong><small>勾选后，仅同步至小红书的原创声明</small></span>
+            </label>
+            <label class="original-option" for="channelsHideLocation">
+              <input id="channelsHideLocation" name="channels_hide_location" type="checkbox" value="true">
+              <span class="original-check" aria-hidden="true">✓</span>
+              <span class="original-option-copy"><strong>视频号不显示位置</strong><small>开启后，发布视频号时将定位设为“不显示位置”</small></span>
+            </label>
+            <label class="original-option" for="channelsOriginal">
+              <input id="channelsOriginal" name="channels_original" type="checkbox" value="true">
+              <span class="original-check" aria-hidden="true">✓</span>
+              <span class="original-option-copy"><strong>视频号声明原创</strong><small>开启后，仅同步至视频号的原创声明</small></span>
+            </label>
+          </div>
+          <div class="publish-extra-settings">
+            <div class="publish-location-setting">
+              <div class="publish-setting-heading"><label for="publishLocation">发布位置</label><small>留空则不设置；视频号“不显示位置”优先</small></div>
+              <input class="form-control" id="publishLocation" name="location" maxlength="100" placeholder="选填，输入定位名称；发布时搜索并选择第一条结果">
+            </div>
+            <div class="direct-publish-setting">
+              <div class="publish-setting-heading"><strong>完成后直接发布</strong><small>按平台单独开启，默认停留在发布准备页</small></div>
+              <div class="direct-publish-options">
+                <label class="direct-publish-option" for="directPublishDouyin">
+                  <input id="directPublishDouyin" name="direct_publish_douyin" type="checkbox" value="true">
+                  <span class="platform-logo douyin">抖</span>
+                  <span class="direct-publish-copy"><strong>抖音</strong><small>填写完成后点击发布</small></span>
+                  <span class="direct-publish-switch" aria-hidden="true"><i></i></span>
+                </label>
+                <label class="direct-publish-option" for="directPublishChannels">
+                  <input id="directPublishChannels" name="direct_publish_channels" type="checkbox" value="true">
+                  <span class="platform-logo channels">视</span>
+                  <span class="direct-publish-copy"><strong>视频号</strong><small>填写完成后点击发表</small></span>
+                  <span class="direct-publish-switch" aria-hidden="true"><i></i></span>
+                </label>
+                <label class="direct-publish-option" for="directPublishBilibili">
+                  <input id="directPublishBilibili" name="direct_publish_bilibili" type="checkbox" value="true">
+                  <span class="platform-logo bili">B</span>
+                  <span class="direct-publish-copy"><strong>B站</strong><small>填写完成后点击投稿</small></span>
+                  <span class="direct-publish-switch" aria-hidden="true"><i></i></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="panel schedule-panel">
+        <div class="panel-head"><div><span class="flow-number">4</span><h2>定时发布时间</h2></div><span class="section-tip">可选，每个平台独立设置</span></div>
+        <div class="schedule-card" id="scheduleCard">
+          <div class="schedule-switch">
+            <label class="schedule-toggle-control" for="scheduleEnabled" aria-label="开启或关闭定时发布">
+              <input id="scheduleEnabled" name="schedule_enabled" type="checkbox" value="true">
+              <span class="schedule-switch-track" aria-hidden="true"></span>
+            </label>
+            <span class="schedule-switch-copy"><strong>开启定时发布</strong><small>开启后，将在各平台发布准备页选择下面的时间</small></span>
+          </div>
+          <div class="schedule-fields" id="scheduleFields" hidden>
+          <div class="schedule-time-field schedule-common-field">
+            <div class="schedule-field-heading">
+              <label class="field-label" for="commonScheduleDate">通用发布时间</label>
+              <span>平台未单独设置时使用</span>
+            </div>
+            <div class="platform-datetime-control common-datetime-control">
+              <input class="form-control" id="commonScheduleDate" type="date" aria-label="通用发布日期" disabled>
+              <select class="form-select" id="commonScheduleHour" aria-label="通用发布小时" disabled></select>
+              <span class="platform-time-separator">:</span>
+              <select class="form-select" id="commonScheduleMinute" aria-label="通用发布分钟" disabled></select>
+              <input id="commonScheduleTime" name="scheduled_at" type="hidden" disabled>
+            </div>
+          </div>
+          <div class="schedule-platform-heading"><strong>平台独立发布时间</strong><span>留空则使用通用发布时间</span></div>
+          <div class="schedule-time-field" data-platform="douyin">
+            <label class="field-label" for="douyinScheduleTime">抖音发布时间</label>
+            <div class="platform-datetime-control">
+              <input class="form-control" id="douyinScheduleDate" type="date" aria-label="抖音发布日期" disabled>
+              <select class="form-select" id="douyinScheduleHour" aria-label="抖音发布小时" disabled></select>
+              <span class="platform-time-separator">:</span>
+              <select class="form-select" id="douyinScheduleMinute" aria-label="抖音发布分钟" disabled></select>
+              <input id="douyinScheduleTime" name="scheduled_at_douyin" type="hidden" disabled>
+            </div>
+          </div>
+          <div class="schedule-time-field" data-platform="xiaohongshu">
+            <label class="field-label" for="xiaohongshuScheduleTime">小红书发布时间</label>
+            <div class="platform-datetime-control">
+              <input class="form-control" id="xiaohongshuScheduleDate" type="date" aria-label="小红书发布日期" disabled>
+              <select class="form-select" id="xiaohongshuScheduleHour" aria-label="小红书发布小时" disabled></select>
+              <span class="platform-time-separator">:</span>
+              <select class="form-select" id="xiaohongshuScheduleMinute" aria-label="小红书发布分钟" disabled></select>
+              <input id="xiaohongshuScheduleTime" name="scheduled_at_xiaohongshu" type="hidden" disabled>
+            </div>
+          </div>
+          <div class="schedule-time-field" data-platform="channels">
+            <label class="field-label" for="channelsScheduleTime">视频号发布时间</label>
+            <input class="form-control" id="channelsScheduleTime" name="scheduled_at_channels" type="datetime-local" step="60" disabled>
+          </div>
+          <div class="schedule-time-field bilibili-schedule-field" data-platform="bilibili">
+            <label class="field-label" for="bilibiliScheduleTime">B站发布时间</label>
+            <div class="platform-datetime-control">
+              <input class="form-control" id="bilibiliScheduleDate" type="date" aria-label="B站发布日期" disabled>
+              <select class="form-select" id="bilibiliScheduleHour" aria-label="B站发布小时" disabled></select>
+              <span class="platform-time-separator">:</span>
+              <select class="form-select" id="bilibiliScheduleMinute" aria-label="B站发布分钟" disabled></select>
+              <input id="bilibiliScheduleTime" name="scheduled_at_bilibili" type="hidden" disabled>
+            </div>
+          </div>
+          </div>
+        </div>
+        <div class="schedule-note">平台独立时间优先；未单独设置的平台使用通用发布时间。仅勾选“完成后直接发布”的平台会自动点击最终发布按钮。</div>
+      </section>
+      <section class="action-panel"><div class="submit-copy"><strong id="submitTitle">上传到勾选的平台</strong><span id="submitHint">使用已绑定账号，为每个平台并行打开独立 Chrome 窗口</span></div><button class="start-btn" id="startButton" type="submit"><span>↑</span> 上传视频到所选平台</button></section>
+      <div class="platform-title-modal" id="platformTitleModal" hidden>
+        <div class="platform-title-dialog" role="dialog" aria-modal="true" aria-labelledby="platformTitleModalTitle">
+          <header class="platform-title-modal-head"><div><span class="platform-title-modal-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6.5h16M4 12h10M4 17.5h7"/><path d="m17 15 3 3-3 3M20 18h-6"/></svg></span><span><h2 id="platformTitleModalTitle">自定义平台标题</h2><p>留空的平台将自动使用通用标题</p></span></div><button type="button" id="platformTitleClose" aria-label="关闭自定义平台标题">×</button></header>
+          <div class="platform-title-grid">
+            <div class="platform-title-field" data-platform="douyin"><label for="titleDouyin"><span class="title-dot douyin"></span>抖音标题 <i id="titleDouyinCount">0 / 30</i></label><input class="form-control" id="titleDouyin" name="title_douyin" maxlength="30" placeholder="留空则使用通用标题，最多30字"></div>
+            <div class="platform-title-field" data-platform="xiaohongshu"><label for="titleXiaohongshu"><span class="title-dot xhs"></span>小红书标题 <i id="titleXiaohongshuCount">0 / 20</i></label><input class="form-control" id="titleXiaohongshu" name="title_xiaohongshu" maxlength="20" placeholder="留空则使用通用标题，最多20字"></div>
+            <div class="platform-title-field" data-platform="channels"><label for="titleChannels"><span class="title-dot channels"></span>视频号标题 <i id="titleChannelsCount">0 / 100</i></label><input class="form-control" id="titleChannels" name="title_channels" maxlength="100" placeholder="留空则使用通用标题"></div>
+            <div class="platform-title-field" data-platform="channels"><label for="titleChannelsShort"><span class="title-dot channels"></span>视频号短标题 <i id="titleChannelsShortCount">0 / 16</i></label><input class="form-control" id="titleChannelsShort" name="short_title_channels" maxlength="16" placeholder="选填，最多16字，逗号自动转为空格"></div>
+            <div class="platform-title-field" data-platform="bilibili"><label for="titleBilibili"><span class="title-dot bili"></span>B站标题 <i id="titleBilibiliCount">0 / 80</i></label><input class="form-control" id="titleBilibili" name="title_bilibili" maxlength="80" placeholder="留空则使用通用标题，最多80字"></div>
+          </div>
+          <footer class="platform-title-modal-actions"><p class="platform-title-default-hint"><span aria-hidden="true">✓</span>未填写时默认使用通用标题</p><span><button class="platform-title-cancel" id="cancelPlatformTitles" type="button">取消</button><button class="platform-title-save" id="savePlatformTitles" type="button">保存</button></span></footer>
+        </div>
+      </div>
+    </form>
+  </div></main>
+  <div class="completion-modal" id="completionModal" hidden><div class="completion-dialog" role="dialog" aria-modal="true" aria-labelledby="completionTitle"><div class="completion-icon">✓</div><h2 id="completionTitle">平台处理完成</h2><p id="completionMessage">所选平台的视频上传与资料填写已完成</p><div class="completion-results" id="completionResults"></div><button type="button" id="completionClose">知道了</button></div></div>
+  <div class="xhs-risk-modal" id="xhsRiskModal" hidden>
+    <section class="xhs-risk-dialog" role="alertdialog" aria-modal="true" aria-labelledby="xhsRiskTitle" aria-describedby="xhsRiskDescription">
+      <span class="xhs-risk-icon" aria-hidden="true">!</span>
+      <div class="xhs-risk-copy"><h2 id="xhsRiskTitle">小红书账号风控风险提示</h2><p id="xhsRiskDescription">小红书平台存在账号风控风险，不建议使用本工具登录或发布。如果仍要继续，请自行承担可能发生的账号限制、验证或封禁等风险。</p></div>
+      <footer><button id="xhsRiskCancel" type="button">取消</button><button id="xhsRiskContinue" type="button">了解风险，继续</button></footer>
+    </section>
+  </div>
+  <div class="platform-notice-stack" id="platformNoticeStack" aria-live="polite"></div>
+  <script src="/static/publish-v3.js"></script>
+</body>
+</html>

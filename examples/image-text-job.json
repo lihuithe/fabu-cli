@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "idempotency_key": "replace-with-your-unique-image-text-key",
+  "type": "image_text",
+  "action": "prepare",
+  "media": {
+    "images": ["/absolute/path/to/first.png", "/absolute/path/to/second.jpg"]
+  },
+  "content": {
+    "title": "本次图文标题",
+    "description": "本次图文正文",
+    "topics": ["AI", "效率工具"]
+  },
+  "targets": [
+    {
+      "platform": "xiaohongshu",
+      "account_id": "replace-with-account-id",
+      "declaration": "笔记含AI合成内容"
+    }
+  ]
+}

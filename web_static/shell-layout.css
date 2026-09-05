@@ -1,0 +1,58 @@
+/* 固定桌面外壳，只让主内容区域滚动。 */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.page-shell,
+.main-content {
+  position: relative;
+  top: 60px;
+  height: calc(100vh - 60px);
+  height: calc(100dvh - 60px);
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-top: 28px;
+  scrollbar-color: rgba(112, 120, 144, .34) transparent;
+  scrollbar-width: thin;
+}
+
+.page-shell::-webkit-scrollbar,
+.main-content::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.page-shell::-webkit-scrollbar-track,
+.main-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.page-shell::-webkit-scrollbar-thumb,
+.main-content::-webkit-scrollbar-thumb {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(112, 120, 144, .34);
+  background-clip: padding-box;
+}
+
+.page-shell::-webkit-scrollbar-thumb:hover,
+.main-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(92, 101, 128, .58);
+  background-clip: padding-box;
+}
+
+body.platform-title-modal-open .page-shell {
+  overflow: hidden;
+}
+
+@media (max-width: 760px) {
+  .page-shell,
+  .main-content {
+    padding-top: 18px;
+  }
+}

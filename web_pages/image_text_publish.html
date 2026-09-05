@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>发布Ready - 图文发布</title>
+  <link href="/static/app-icon.png" rel="icon" type="image/png">
+  <link href="/static/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/platform-link.css" rel="stylesheet">
+  <link href="/static/image-text-publish.css" rel="stylesheet">
+</head>
+<body data-page="image-text-publish">
+  <script src="/static/core-shell.js"></script>
+  <main class="page-shell"><div class="content-width">
+    <div class="page-title-row">
+      <div><h1>图文发布</h1><p>使用预先绑定的账号，为抖音、小红书和视频号并行填写图文资料</p></div>
+      <a class="secondary-btn manage-account-btn" href="/accounts">管理平台账号</a>
+    </div>
+    <form id="imageTextForm">
+      <section class="panel">
+        <div class="panel-head"><div><span class="flow-number">1</span><h2>上传图片与填写内容</h2></div><div class="panel-head-actions"><button class="clear-publish-btn" id="clearImageTextButton" type="button">清空</button><span class="section-tip">支持一次选择多张图片</span></div></div>
+        <div class="publish-grid image-text-grid">
+          <div class="image-column">
+            <div class="image-editor-heading">
+              <label class="field-label" for="images">图片编辑</label>
+              <span id="imageCount">0 / 18</span>
+            </div>
+            <div class="image-drop" id="imageDrop">
+              <input id="images" name="images" type="file" accept="image/jpeg,image/png,image/webp" multiple required>
+              <label class="image-empty-state" id="imageEmptyState" for="images">
+                <span aria-hidden="true">＋</span>
+              </label>
+              <div class="image-preview-state" id="imagePreviewState" hidden>
+                <div class="image-preview-strip">
+                  <button class="image-add-tile" id="addImagesButton" type="button" aria-label="继续添加图片"><span aria-hidden="true">＋</span><small>添加图片</small></button>
+                  <div class="image-preview-grid" id="imagePreviewGrid"></div>
+                </div>
+                <div class="image-preview-actions"><span id="imagePreviewSummary">已选择 0 张图片</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="publish-fields">
+            <div class="common-title-heading"><label class="field-label" for="imageTextTitle">通用标题 <span id="imageTextTitleCount">0 / 100</span></label><button class="platform-title-trigger" id="openImageTextPlatformTitles" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M4 12h10M4 17.5h7"/><path d="m17 15 3 3-3 3M20 18h-6"/></svg><span>自定义平台标题</span></button></div>
+            <input class="form-control" id="imageTextTitle" name="title" maxlength="100" placeholder="默认用于所有平台，也可以单独自定义">
+            <p class="platform-title-summary" id="imageTextPlatformTitleSummary">默认使用通用标题</p>
+            <div class="topic-input-grid">
+              <div class="topic-input-field fixed-topic-field"><label class="field-label" for="imageTextFixedTopic">固定标签</label><input class="form-control" id="imageTextFixedTopic" name="fixed_topic" placeholder="如：小黑日报助手"><small class="topic-field-hint">长期保留 · 发布时排第一</small></div>
+              <div class="topic-input-field"><label class="field-label" for="imageTextTopics">本次话题 / 标签</label><input class="form-control" id="imageTextTopics" name="topics" placeholder="如：#AI工具 #效率提升"></div>
+            </div>
+            <label class="field-label" for="imageTextContent">正文 <span id="imageTextContentCount">0 / 1000</span></label>
+            <textarea class="form-control" id="imageTextContent" name="content" rows="5" maxlength="1000" placeholder="请输入图文正文"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><div><span class="flow-number">2</span><h2>选择本次发布账号</h2></div><span class="section-tip">仅显示支持图文发布的平台</span></div>
+        <div class="publish-account-groups image-text-account-groups" id="imageTextAccountTargetList"><div class="account-list-loading">正在读取已绑定账号…</div></div>
+        <div class="manual-note"><b>按账号选择 · 全部并行执行</b><span>每个勾选的账号会使用自己的独立登录状态，并打开一个独立 Chrome 窗口；资料填写完成后不会点击最终发布。</span></div>
+      </section>
+
+      <section class="panel image-text-platform-settings" id="imageTextPlatformSettings">
+        <div class="panel-head"><div><span class="flow-number">3</span><h2>平台发布设置</h2></div><span class="section-tip">仅对本次勾选的平台生效</span></div>
+        <div class="declaration-grid image-text-declaration-grid">
+          <div class="declaration-card inactive" data-platform="douyin">
+            <div class="declaration-title"><span class="platform-logo douyin">抖</span><div><strong>抖音</strong><small>自主声明</small></div></div>
+            <select class="form-select" id="imageTextDouyinDeclaration" name="declaration_douyin" aria-label="抖音自主声明" disabled><option>无需添加自主声明</option><option>内容由AI生成</option><option>内容为个人观点或见解</option><option>内容为转载信息</option><option>内容含营销推广信息</option><option>虚构演绎，仅供娱乐</option></select>
+          </div>
+          <div class="declaration-card inactive" data-platform="xiaohongshu">
+            <div class="declaration-title"><span class="platform-logo xhs">小</span><div><strong>小红书</strong><small>添加内容类型声明</small></div></div>
+            <select class="form-select" id="imageTextXhsDeclaration" name="declaration_xiaohongshu" aria-label="小红书内容类型声明" required disabled><option selected>虚构演绎，仅供娱乐</option><option>笔记含AI合成内容</option><option>内容包含营销广告</option><option>内容来源声明</option></select>
+          </div>
+          <div class="declaration-card inactive" data-platform="channels">
+            <div class="declaration-title"><span class="platform-logo channels">视</span><div><strong>视频号</strong><small>内容标注</small></div></div>
+            <select class="form-select" id="imageTextChannelsDeclaration" name="declaration_channels" aria-label="视频号内容标注" disabled><option>无需标注</option><option>含AI生成内容</option><option>内容为虚构剧情，仅供娱乐</option><option>个人观点，仅供参考</option><option>内容包含营销广告</option><option>内容为自行拍摄</option></select>
+          </div>
+        </div>
+        <div class="publish-setting-options image-text-setting-options">
+          <label class="original-option inactive" id="imageTextXhsOriginalOption" for="imageTextXhsOriginal" data-platform="xiaohongshu">
+            <input id="imageTextXhsOriginal" name="original" type="checkbox" value="true" disabled>
+            <span class="original-check" aria-hidden="true">✓</span>
+            <span class="original-option-copy"><strong>小红书声明原创</strong><small>勾选后自动打开原创声明、确认协议并完成声明</small></span>
+          </label>
+          <label class="original-option inactive" id="imageTextChannelsHideLocationOption" for="imageTextChannelsHideLocation" data-platform="channels">
+            <input id="imageTextChannelsHideLocation" name="channels_hide_location" type="checkbox" value="true" disabled>
+            <span class="original-check" aria-hidden="true">✓</span>
+            <span class="original-option-copy"><strong>视频号不显示位置</strong><small>开启后将位置设置为“不显示位置”</small></span>
+          </label>
+          <label class="original-option inactive" id="imageTextChannelsOriginalOption" for="imageTextChannelsOriginal" data-platform="channels">
+            <input id="imageTextChannelsOriginal" name="channels_original" type="checkbox" value="true" disabled>
+            <span class="original-check" aria-hidden="true">✓</span>
+            <span class="original-option-copy"><strong>视频号声明原创</strong><small>开启后自动确认协议并完成原创声明</small></span>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel schedule-panel image-text-schedule-panel">
+        <div class="panel-head"><div><span class="flow-number">4</span><h2>定时发布时间</h2></div><span class="section-tip">可选，每个平台可独立设置</span></div>
+        <div class="schedule-card" id="imageTextScheduleCard">
+          <div class="schedule-switch">
+            <label class="schedule-toggle-control" for="imageTextScheduleEnabled" aria-label="开启或关闭图文定时发布">
+              <input id="imageTextScheduleEnabled" name="schedule_enabled" type="checkbox" value="true">
+              <span class="schedule-switch-track" aria-hidden="true"></span>
+            </label>
+            <span class="schedule-switch-copy"><strong>开启定时发布</strong><small>开启后，将在各平台图文发布页选择下面的时间</small></span>
+          </div>
+          <div class="schedule-fields" id="imageTextScheduleFields" hidden>
+            <div class="schedule-time-field schedule-common-field">
+              <div class="schedule-field-heading"><label class="field-label" for="imageTextCommonScheduleDate">通用发布时间</label><span>平台未单独设置时使用</span></div>
+              <div class="platform-datetime-control common-datetime-control">
+                <input class="form-control" id="imageTextCommonScheduleDate" type="date" aria-label="图文通用发布日期" disabled>
+                <select class="form-select" id="imageTextCommonScheduleHour" aria-label="图文通用发布小时" disabled></select>
+                <span class="platform-time-separator">:</span>
+                <select class="form-select" id="imageTextCommonScheduleMinute" aria-label="图文通用发布分钟" disabled></select>
+                <input id="imageTextCommonScheduleTime" name="scheduled_at" type="hidden" disabled>
+              </div>
+            </div>
+            <div class="schedule-platform-heading"><strong>平台独立发布时间</strong><span>留空则使用通用发布时间</span></div>
+            <div class="schedule-time-field inactive" data-platform="douyin">
+              <label class="field-label" for="imageTextDouyinScheduleDate">抖音发布时间</label>
+              <div class="platform-datetime-control">
+                <input class="form-control" id="imageTextDouyinScheduleDate" type="date" aria-label="抖音图文发布日期" disabled>
+                <select class="form-select" id="imageTextDouyinScheduleHour" aria-label="抖音图文发布小时" disabled></select>
+                <span class="platform-time-separator">:</span>
+                <select class="form-select" id="imageTextDouyinScheduleMinute" aria-label="抖音图文发布分钟" disabled></select>
+                <input id="imageTextDouyinScheduleTime" name="scheduled_at_douyin" type="hidden" disabled>
+              </div>
+            </div>
+            <div class="schedule-time-field inactive" data-platform="xiaohongshu">
+              <label class="field-label" for="imageTextXhsScheduleDate">小红书发布时间</label>
+              <div class="platform-datetime-control">
+                <input class="form-control" id="imageTextXhsScheduleDate" type="date" aria-label="小红书图文发布日期" disabled>
+                <select class="form-select" id="imageTextXhsScheduleHour" aria-label="小红书图文发布小时" disabled></select>
+                <span class="platform-time-separator">:</span>
+                <select class="form-select" id="imageTextXhsScheduleMinute" aria-label="小红书图文发布分钟" disabled></select>
+                <input id="imageTextXhsScheduleTime" name="scheduled_at_xiaohongshu" type="hidden" disabled>
+              </div>
+            </div>
+            <div class="schedule-time-field inactive" data-platform="channels">
+              <label class="field-label" for="imageTextChannelsScheduleDate">视频号发布时间</label>
+              <div class="platform-datetime-control">
+                <input class="form-control" id="imageTextChannelsScheduleDate" type="date" aria-label="视频号图文发布日期" disabled>
+                <select class="form-select" id="imageTextChannelsScheduleHour" aria-label="视频号图文发布小时" disabled></select>
+                <span class="platform-time-separator">:</span>
+                <select class="form-select" id="imageTextChannelsScheduleMinute" aria-label="视频号图文发布分钟" disabled></select>
+                <input id="imageTextChannelsScheduleTime" name="scheduled_at_channels" type="hidden" disabled>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="schedule-note">平台独立时间优先；留空的平台使用通用时间。工具只会选择时间并保留页面，不会点击最终发布按钮。</div>
+      </section>
+
+      <section class="action-panel" id="imageTextActionPanel"><div class="submit-copy"><strong id="submitTitle">上传图文到勾选的平台</strong><span id="submitHint">请选择图片、填写标题并勾选发布账号</span></div><button class="start-btn" id="startButton" type="submit"><span>↑</span> 上传图文到所选平台</button></section>
+
+      <div class="platform-title-modal" id="imageTextPlatformTitleModal" hidden>
+        <div class="platform-title-dialog" role="dialog" aria-modal="true" aria-labelledby="imageTextPlatformTitleModalTitle">
+          <header class="platform-title-modal-head"><div><span class="platform-title-modal-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6.5h16M4 12h10M4 17.5h7"/><path d="m17 15 3 3-3 3M20 18h-6"/></svg></span><span><h2 id="imageTextPlatformTitleModalTitle">自定义平台标题</h2><p>留空的平台将自动使用通用标题</p></span></div><button type="button" id="closeImageTextPlatformTitles" aria-label="关闭自定义平台标题">×</button></header>
+          <div class="platform-title-grid">
+            <div class="platform-title-field active"><label for="imageTextTitleDouyin"><span class="title-dot douyin"></span>抖音标题 <i id="imageTextTitleDouyinCount">0 / 30</i></label><input class="form-control" id="imageTextTitleDouyin" name="title_douyin" maxlength="30" placeholder="留空则使用通用标题，最多30字"></div>
+            <div class="platform-title-field active"><label for="imageTextTitleXiaohongshu"><span class="title-dot xhs"></span>小红书标题 <i id="imageTextTitleXiaohongshuCount">0 / 20</i></label><input class="form-control" id="imageTextTitleXiaohongshu" name="title_xiaohongshu" maxlength="20" placeholder="留空则使用通用标题，最多20字"></div>
+            <div class="platform-title-field active"><label for="imageTextTitleChannels"><span class="title-dot channels"></span>视频号标题 <i id="imageTextTitleChannelsCount">0 / 100</i></label><input class="form-control" id="imageTextTitleChannels" name="title_channels" maxlength="100" placeholder="留空则使用通用标题"></div>
+            <div class="platform-title-field active"><label for="imageTextTitleChannelsShort"><span class="title-dot channels"></span>视频号短标题 <i id="imageTextTitleChannelsShortCount">0 / 16</i></label><input class="form-control" id="imageTextTitleChannelsShort" name="short_title_channels" maxlength="16" placeholder="选填，最多16字"></div>
+          </div>
+          <footer class="platform-title-modal-actions"><p class="platform-title-default-hint"><span aria-hidden="true">✓</span>未填写时默认使用通用标题</p><span><button class="platform-title-cancel" id="cancelImageTextPlatformTitles" type="button">取消</button><button class="platform-title-save" id="saveImageTextPlatformTitles" type="button">保存</button></span></footer>
+        </div>
+      </div>
+    </form>
+  </div></main>
+
+  <div class="completion-modal" id="imageTextCompletionModal" hidden><div class="completion-dialog" id="imageTextCompletionDialog" role="dialog" aria-modal="true" aria-labelledby="imageTextCompletionTitle"><div class="completion-icon">✓</div><h2 id="imageTextCompletionTitle">图文资料处理完成</h2><p id="imageTextCompletionMessage">请在各平台窗口检查并手动发布</p><div class="completion-results" id="imageTextCompletionResults"></div><button type="button" id="completionClose">知道了</button></div></div>
+  <div class="xhs-risk-modal" id="imageTextXhsRiskModal" hidden><section class="xhs-risk-dialog" role="alertdialog" aria-modal="true" aria-labelledby="imageTextXhsRiskTitle"><span class="xhs-risk-icon" aria-hidden="true">!</span><div class="xhs-risk-copy"><h2 id="imageTextXhsRiskTitle">小红书账号风控风险提示</h2><p>小红书平台存在账号风控风险。如果仍要继续，请自行承担可能发生的账号限制、验证或封禁等风险。</p></div><footer><button id="imageTextXhsRiskCancel" type="button">取消</button><button id="imageTextXhsRiskContinue" type="button">了解风险，继续</button></footer></section></div>
+  <script src="/static/image-text-publish.js"></script>
+</body>
+</html>

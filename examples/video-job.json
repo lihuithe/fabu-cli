@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "idempotency_key": "replace-with-your-unique-video-key",
+  "type": "video",
+  "action": "prepare",
+  "media": {
+    "video": "/absolute/path/to/video.mp4"
+  },
+  "content": {
+    "title": "本次视频标题",
+    "description": "本次视频简介",
+    "topics": ["AI", "效率工具"]
+  },
+  "targets": [
+    {
+      "platform": "douyin",
+      "account_id": "replace-with-account-id",
+      "declaration": "内容由AI生成"
+    }
+  ]
+}
