@@ -86,7 +86,7 @@ export class SharedChromeRunner {
   hasOpenWindows() { return this.jobBrowsers.size > 0; }
   verifySubmission(job) {
     if (!this.page || this.page.isClosed()) throw new Error('原任务窗口已经关闭，请到平台核实并记录结果');
-    return verifySubmission(this.page, job.platformKey, { timeoutMs: 5_000 });
+    return verifySubmission(this.page, job.platformKey, { timeoutMs: 5_000, expected: { title: job.title, scheduledAt: job.scheduledAt } });
   }
 
   async closeWindows() {
@@ -231,7 +231,7 @@ export class SharedChromeRunner {
         this.#throwIfCancelled();
         job.submissionStarted = true;
         this.#stage(job, 'submitting', '即将点击最终发布，已记录提交边界');
-      });
+      }, { expected: { title: job.title, scheduledAt: job.scheduledAt } });
       await this.#snapshot(page, job, 'submission_receipt');
       this.log(`[${platform.name}/${job.account}] 已检测到平台接受提交的明确回执`);
     }
