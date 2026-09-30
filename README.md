@@ -19,6 +19,8 @@ cd fabu-cli
 
 安装下方环境和依赖后，执行 `npm start` 打开工作台，或使用 CLI 标准流程。当前通过源码运行，`package.json` 的 `private: true` 用于防止误发布到 npm，不影响 GitHub 仓库公开访问。
 
+给 Codex、Cursor 等 Agent 用的安装与话术模板见 [docs/agent-tutorial.md](docs/agent-tutorial.md)；Skill 模板在 [skills/fabu-cli/](skills/fabu-cli/)。
+
 ## 环境与安装
 
 - Node.js **22.12 或更高版本**。

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fabu 多平台发布"
+  short_description: "通过本机 Fabu 管理多平台视频与图文上传、发布、登录及任务核实"
+  default_prompt: "使用 $fabu-cli，根据我提供的素材和目标平台准备或提交发布任务，并核实各账号结果。"
