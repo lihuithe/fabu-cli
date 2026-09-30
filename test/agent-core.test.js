@@ -121,6 +121,7 @@ test('在提交边界停止服务后持久化 unknown，重启不重放，必须
   await h.service.shutdown();
   h.service = new TaskService({ dataRoot: h.dataRoot, accounts, probe: fakeProbe, runnerFactory: h.factory });
   assert.equal(h.service.get(task.id).outcome, 'submission_unknown');
+  assert.ok(Date.parse(h.service.get(task.id).items[0].submission_started_at));
   assert.equal(h.service.get(task.id).execution_status, 'needs_attention');
   assert.equal(h.starts.length, 1);
   assert.equal((await h.service.create(input, h.uploads)).reused, true);
@@ -158,6 +159,21 @@ test('未知提交可在保留窗口重新读取回执，不会再次执行发�
   assert.equal(verified.results[0].evidence.source, 'platform_receipt');
   assert.equal(h.starts.length, 1);
   assert.equal(h.service.live.size, 0);
+});
+
+test('重新核验失败会记录事件并保留 unknown，不能触发重发', async t => {
+  const h = harness(t, { behavior: async ({ runner, job, completed, progress }) => {
+    runner.verifySubmission = async () => { throw Object.assign(new Error('列表记录仍未匹配'), { code: 'SUBMISSION_UNKNOWN' }); };
+    progress(job, 'submitting', '即将点击');
+    completed(job, false, '尚未检测到回执', 'SUBMISSION_UNKNOWN', { outcome: 'submission_unknown' });
+  } });
+  const { task } = await h.service.create({ ...inputFor('verify-failure'), action: 'submit' }, h.uploads);
+  await until(() => h.service.get(task.id).status === 'completed' && [...h.service.live.values()].every(e => !e.running));
+  await assert.rejects(h.service.verify(task.id), { code: 'SUBMISSION_UNKNOWN' });
+  assert.equal(h.service.get(task.id).outcome, 'submission_unknown');
+  assert.equal(h.starts.length, 1);
+  const events = h.service.events(task.id, 0, 100);
+  assert.ok(events.some(event => event.type === 'submission_verification_failed' && event.code === 'SUBMISSION_UNKNOWN'));
 });
 
 test('取消正在提交的任务保留 unknown，迟到的完成回调不能覆盖取消结果', async t => {

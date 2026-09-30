@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { DateTime } from 'luxon';
 import { AppError } from './errors.js';
-import { PLATFORMS, DECLARATION_OPTIONS, channelsShortTitleStatus, mergeTopics, channelsCoverRatios, xiaohongshuCoverRatio, coverSetStatus } from './platforms.js';
+import { PLATFORMS, DECLARATION_OPTIONS, channelsShortTitleStatus, mergeTopics, normalizeDeclaration, scheduleMaxDays, channelsCoverRatios, coverSetStatus } from './platforms.js';
 
-const platform = z.enum(['douyin', 'xiaohongshu', 'channels', 'bilibili']);
+const platform = z.enum(['douyin', 'kuaishou', 'channels', 'bilibili']);
 const action = z.enum(['prepare', 'submit']);
 const text = z.string().trim();
 const targetSchema = z.object({
@@ -37,17 +37,18 @@ export function parseTask(value) {
 
 export const CAPABILITIES = Object.fromEntries(Object.keys(PLATFORMS).map(key => [key, {
   name: PLATFORMS[key].name,
-  video: { prepare: true, submit: key !== 'xiaohongshu', submission_verification: key !== 'xiaohongshu' ? 'visible_platform_receipt' : null },
+  video: { prepare: true, submit: true, submission_verification: 'visible_platform_receipt' },
   image_text: { prepare: key !== 'bilibili', submit: false },
-  title_limit: { douyin: 30, xiaohongshu: 20, channels: 100, bilibili: 80 }[key],
+  title_limit: { douyin: 30, kuaishou: 30, channels: 100, bilibili: 80 }[key],
+  title_required: key !== 'kuaishou',
   short_title_limit: key === 'channels' ? 16 : null,
-  original: ['channels', 'xiaohongshu'].includes(key),
+  original: key === 'channels',
   hide_location: key === 'channels',
   video_location: key !== 'bilibili',
-  video_cover_ratios: { portrait: key === 'channels' ? ['3:4'] : PLATFORMS[key].coverRatios, landscape: key === 'channels' ? ['3:4', '4:3'] : key === 'xiaohongshu' ? ['4:3'] : PLATFORMS[key].coverRatios, policy: '整套自定义封面或全部使用平台默认封面' },
+  video_cover_ratios: { portrait: key === 'channels' ? ['3:4'] : PLATFORMS[key].coverRatios, landscape: key === 'channels' ? ['3:4', '4:3'] : PLATFORMS[key].coverRatios, policy: '整套自定义封面或全部使用平台默认封面' },
   media_limits: { video_bytes: 20 * 1024 ** 3, image_bytes: 30 * 1024 ** 2, image_count: 18 },
   declaration_options: DECLARATION_OPTIONS[key],
-  schedule: { timezone: 'Asia/Shanghai', minimum_lead_minutes: key === 'douyin' ? 120 : key === 'xiaohongshu' ? 60 : 5, maximum_days: key === 'douyin' ? 14 : 15, minute_step: key === 'bilibili' ? 5 : 1 }
+  schedule: { timezone: 'Asia/Shanghai', minimum_lead_minutes: key === 'douyin' ? 120 : 5, maximum_days: scheduleMaxDays(key), minute_step: key === 'bilibili' ? 5 : 1 }
 }]));
 
 export function normalizeSchedule(raw, key, now = Date.now(), common = false) {
@@ -68,28 +69,30 @@ export function normalizeTargets(input, accounts, dimensions = { width: 0, heigh
   return input.targets.map(target => {
     const key = target.platform;
     const mode = target.action ?? input.action;
-    if (!CAPABILITIES[key][input.type][mode]) throw new AppError('UNSUPPORTED_CAPABILITY', input.type === 'image_text' && key === 'bilibili' ? '图文发布仅支持抖音、小红书和视频号' : `${PLATFORMS[key].name}的${input.type}暂不支持 ${mode}`, { details: { platform: key, type: input.type, action: mode } });
+    if (!CAPABILITIES[key][input.type][mode]) throw new AppError('UNSUPPORTED_CAPABILITY', input.type === 'image_text' && key === 'bilibili' ? '图文发布仅支持抖音、快手和视频号' : `${PLATFORMS[key].name}的${input.type}暂不支持 ${mode}`, { details: { platform: key, type: input.type, action: mode } });
     const account = accounts.getAccount(key, target.account_id);
     if (!account) throw new AppError('LOGIN_EXPIRED', `${PLATFORMS[key].name}账号不存在或登录状态已丢失`, { nextAction: { command: 'accounts login', platform: key, account_id: target.account_id } });
     const title = target.title || input.content.title;
-    if (!title || title.length > CAPABILITIES[key].title_limit) throw new AppError('INVALID_TITLE', `${PLATFORMS[key].name}标题不能为空且不能超过 ${CAPABILITIES[key].title_limit} 字`);
+    // 快手作品没有独立标题，仅以简介发布，标题可为空。
+    if (key === 'kuaishou' ? title.length > CAPABILITIES[key].title_limit : (!title || title.length > CAPABILITIES[key].title_limit)) throw new AppError('INVALID_TITLE', `${PLATFORMS[key].name}标题不能为空且不能超过 ${CAPABILITIES[key].title_limit} 字`);
     const short = channelsShortTitleStatus(target.short_title);
     if (key === 'channels' && !short.valid) throw new AppError('INVALID_TITLE', short.message);
-    const declaration = target.declaration ?? DECLARATION_OPTIONS[key][0];
-    if (!DECLARATION_OPTIONS[key].includes(declaration)) throw new AppError('INVALID_DECLARATION', `${PLATFORMS[key].name}声明选项无效`);
-    if (target.short_title && key !== 'channels' || target.hide_location && key !== 'channels' || target.original && !['channels', 'xiaohongshu'].includes(key) || target.location && (key === 'bilibili' || input.type === 'image_text')) throw new AppError('UNSUPPORTED_CAPABILITY', `${PLATFORMS[key].name}不支持本次提交的短标题、原创或位置选项`);
+    // 快手默认不添加作者声明（空字符串），旧别名会归一化为官方选项。
+    const declaration = key === 'kuaishou' ? normalizeDeclaration(key, target.declaration) : target.declaration ?? DECLARATION_OPTIONS[key][0];
+    if (!(key === 'kuaishou' && !declaration) && !DECLARATION_OPTIONS[key].includes(declaration)) throw new AppError('INVALID_DECLARATION', `${PLATFORMS[key].name}声明选项无效`);
+    if (target.short_title && key !== 'channels' || target.hide_location && key !== 'channels' || target.original && key !== 'channels' || target.location && (key === 'bilibili' || input.type === 'image_text')) throw new AppError('UNSUPPORTED_CAPABILITY', `${PLATFORMS[key].name}不支持本次提交的短标题、原创或位置选项`);
     const scheduledAt = normalizeSchedule(target.scheduled_at || input.schedule?.at, key, now);
-    const ratios = key === 'channels' ? channelsCoverRatios(dimensions.width, dimensions.height) : key === 'xiaohongshu' ? [xiaohongshuCoverRatio(dimensions.width, dimensions.height)] : PLATFORMS[key].coverRatios;
+    const ratios = key === 'channels' ? channelsCoverRatios(dimensions.width, dimensions.height) : PLATFORMS[key].coverRatios;
     const cover = coverSetStatus(ratios, Object.keys(input.media.covers));
     if (input.type === 'video' && cover.mode === 'incomplete') throw new AppError('INCOMPLETE_COVERS', `${PLATFORMS[key].name}还缺少 ${cover.missing.join('、')} 封面，请整套上传或使用平台默认封面`);
     const nickname = account.nickname || `${PLATFORMS[key].name}账号`;
     return {
       platformKey: key, accountId: target.account_id, account: account.remark ? `${nickname}（${account.remark}）` : nickname, avatar: account.avatar || '',
       title, shortTitle: key === 'channels' ? short.value : '', content: input.content.description,
-      topics: mergeTopics(input.content.fixed_topic, input.content.topics), declaration, original: key === 'xiaohongshu' && Boolean(target.original),
+      topics: mergeTopics(input.content.fixed_topic, input.content.topics), declaration, original: false,
       channelsOriginal: key === 'channels' && Boolean(target.original), channelsHideLocation: key === 'channels' && Boolean(target.hide_location),
       location: target.location || '', scheduledAt, action: mode, directPublish: mode === 'submit', closeAfterSubmit: input.close_after_submit,
-      videoWidth: dimensions.width, videoHeight: dimensions.height, coverRatio: key === 'xiaohongshu' ? ratios[0] : '', useCustomCover: cover.mode === 'custom'
+      videoWidth: dimensions.width, videoHeight: dimensions.height, coverRatio: '', useCustomCover: cover.mode === 'custom'
     };
   });
 }
@@ -119,8 +122,8 @@ export function legacyInput(body = {}, files = {}, type) {
     targets: [...new Map(targets.map(t => [`${t.platform_key}:${t.account_id}`, t])).values()].map(t => ({
       platform: t.platform_key, account_id: t.account_id, title: body[`title_${t.platform_key}`] || undefined,
       short_title: t.platform_key === 'channels' ? body.short_title_channels || undefined : undefined,
-      declaration: body[`declaration_${t.platform_key}`] || (type === 'image_text' && t.platform_key === 'xiaohongshu' ? '虚构演绎，仅供娱乐' : undefined),
-      original: t.platform_key === 'channels' ? body.channels_original === 'true' : t.platform_key === 'xiaohongshu' && body.original === 'true',
+      declaration: body[`declaration_${t.platform_key}`],
+      original: t.platform_key === 'channels' && body.channels_original === 'true',
       hide_location: t.platform_key === 'channels' && body.channels_hide_location === 'true',
       location: type === 'video' && t.platform_key !== 'bilibili' ? body.location || undefined : undefined,
       action: type === 'video' && body[`direct_publish_${t.platform_key}`] === 'true' ? 'submit' : 'prepare',

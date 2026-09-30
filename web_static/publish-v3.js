@@ -1,19 +1,25 @@
 const PLATFORM_NAMES = {
   douyin: '抖音',
-  xiaohongshu: '小红书',
+  kuaishou: '快手',
   channels: '视频号',
   bilibili: 'B站',
 };
+const PLATFORM_LOGOS = {
+  douyin: { className: 'douyin', text: '抖' },
+  kuaishou: { className: 'kuaishou', text: '快' },
+  channels: { className: 'channels', text: '视' },
+  bilibili: { className: 'bili', text: 'B' },
+};
 const COVER_REQUIREMENTS = {
   douyin: ['3:4', '4:3'],
-  xiaohongshu: ['3:4'],
+  kuaishou: ['3:4'],
   channels: ['3:4'],
   bilibili: ['4:3', '16:9'],
 };
 const RATIO_VALUES = { '3:4': 3 / 4, '4:3': 4 / 3, '16:9': 16 / 9 };
 const TITLE_FIELDS = {
   douyin: { id: 'titleDouyin', limit: 30 },
-  xiaohongshu: { id: 'titleXiaohongshu', limit: 20 },
+  kuaishou: { id: 'titleKuaishou', limit: 30 },
   channels: { id: 'titleChannels', limit: 100 },
   bilibili: { id: 'titleBilibili', limit: 80 },
 };
@@ -39,7 +45,7 @@ const PUBLISH_DRAFT_MAX_AGE = 24 * 60 * 60 * 1000;
 const PUBLISH_DRAFT_FIELDS = [
   'title',
   'titleDouyin',
-  'titleXiaohongshu',
+  'titleKuaishou',
   'titleChannels',
   'titleChannelsShort',
   'titleBilibili',
@@ -48,7 +54,7 @@ const PUBLISH_DRAFT_FIELDS = [
   'publishLocation',
   'commonScheduleTime',
   'douyinScheduleTime',
-  'xiaohongshuScheduleTime',
+  'kuaishouScheduleTime',
   'channelsScheduleTime',
   'bilibiliScheduleTime',
 ];
@@ -65,10 +71,10 @@ const videoEmptyState = document.getElementById('videoEmptyState');
 const videoPreviewState = document.getElementById('videoPreviewState');
 const clearPublishButton = document.getElementById('clearPublishButton');
 const fixedTopic = document.getElementById('fixedTopic');
-const originalContent = document.getElementById('originalContent');
 const channelsHideLocation = document.getElementById('channelsHideLocation');
 const channelsOriginal = document.getElementById('channelsOriginal');
 const directPublishDouyin = document.getElementById('directPublishDouyin');
+const directPublishKuaishou = document.getElementById('directPublishKuaishou');
 const directPublishChannels = document.getElementById('directPublishChannels');
 const directPublishBilibili = document.getElementById('directPublishBilibili');
 const scheduleEnabled = document.getElementById('scheduleEnabled');
@@ -81,10 +87,10 @@ const douyinScheduleTime = document.getElementById('douyinScheduleTime');
 const douyinScheduleDate = document.getElementById('douyinScheduleDate');
 const douyinScheduleHour = document.getElementById('douyinScheduleHour');
 const douyinScheduleMinute = document.getElementById('douyinScheduleMinute');
-const xiaohongshuScheduleTime = document.getElementById('xiaohongshuScheduleTime');
-const xiaohongshuScheduleDate = document.getElementById('xiaohongshuScheduleDate');
-const xiaohongshuScheduleHour = document.getElementById('xiaohongshuScheduleHour');
-const xiaohongshuScheduleMinute = document.getElementById('xiaohongshuScheduleMinute');
+const kuaishouScheduleTime = document.getElementById('kuaishouScheduleTime');
+const kuaishouScheduleDate = document.getElementById('kuaishouScheduleDate');
+const kuaishouScheduleHour = document.getElementById('kuaishouScheduleHour');
+const kuaishouScheduleMinute = document.getElementById('kuaishouScheduleMinute');
 const channelsScheduleTime = document.getElementById('channelsScheduleTime');
 const bilibiliScheduleTime = document.getElementById('bilibiliScheduleTime');
 const bilibiliScheduleDate = document.getElementById('bilibiliScheduleDate');
@@ -92,22 +98,19 @@ const bilibiliScheduleHour = document.getElementById('bilibiliScheduleHour');
 const bilibiliScheduleMinute = document.getElementById('bilibiliScheduleMinute');
 const platformScheduleTimes = {
   douyin: douyinScheduleTime,
-  xiaohongshu: xiaohongshuScheduleTime,
+  kuaishou: kuaishouScheduleTime,
   channels: channelsScheduleTime,
   bilibili: bilibiliScheduleTime,
 };
 const scheduleCard = document.getElementById('scheduleCard');
 const completionModal = document.getElementById('completionModal');
-const xhsRiskModal = document.getElementById('xhsRiskModal');
-const xhsRiskCancel = document.getElementById('xhsRiskCancel');
-const xhsRiskContinue = document.getElementById('xhsRiskContinue');
+const PLATFORM_TITLE_INPUT_IDS = ['titleDouyin', 'titleKuaishou', 'titleChannels', 'titleChannelsShort', 'titleBilibili'];
 const platformTitleModal = document.getElementById('platformTitleModal');
 const openPlatformTitles = document.getElementById('openPlatformTitles');
 const platformTitleClose = document.getElementById('platformTitleClose');
 const cancelPlatformTitles = document.getElementById('cancelPlatformTitles');
 const savePlatformTitles = document.getElementById('savePlatformTitles');
 const platformTitleSummary = document.getElementById('platformTitleSummary');
-const PLATFORM_TITLE_INPUT_IDS = ['titleDouyin', 'titleXiaohongshu', 'titleChannels', 'titleChannelsShort', 'titleBilibili'];
 let platformTitleSnapshot = null;
 const notifiedResults = new Set();
 const notifiedLoginExpiredAccounts = new Set();
@@ -126,30 +129,7 @@ let draftVideoRestorePromise = null;
 let restoringVideoDraft = false;
 const draftCoverSavePromises = new Map();
 let draftCoverRestorePromise = null;
-let xhsRiskResolve = null;
 
-function closeXhsRisk(confirmed) {
-  xhsRiskModal.hidden = true;
-  document.body.classList.remove('xhs-risk-open');
-  const resolve = xhsRiskResolve;
-  xhsRiskResolve = null;
-  if (resolve) resolve(confirmed);
-}
-
-function confirmXhsRisk() {
-  if (xhsRiskResolve) return Promise.resolve(false);
-  xhsRiskModal.hidden = false;
-  document.body.classList.add('xhs-risk-open');
-  xhsRiskCancel.focus();
-  return new Promise((resolve) => { xhsRiskResolve = resolve; });
-}
-
-xhsRiskCancel.addEventListener('click', () => closeXhsRisk(false));
-xhsRiskContinue.addEventListener('click', () => closeXhsRisk(true));
-xhsRiskModal.addEventListener('click', (event) => { if (event.target === xhsRiskModal) closeXhsRisk(false); });
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !xhsRiskModal.hidden) closeXhsRisk(false);
-});
 
 function readPublishDraft() {
   try {
@@ -182,10 +162,10 @@ function savePublishDraft() {
     fields,
     declarations,
     targets: selectedTargets(),
-    original: originalContent.checked,
     channels_hide_location: channelsHideLocation.checked,
     channels_original: channelsOriginal.checked,
     direct_publish_douyin: directPublishDouyin.checked,
+    direct_publish_kuaishou: directPublishKuaishou.checked,
     direct_publish_channels: directPublishChannels.checked,
     direct_publish_bilibili: directPublishBilibili.checked,
     schedule_enabled: scheduleEnabled.checked,
@@ -209,21 +189,36 @@ function restorePublishDraftFields() {
     const field = document.getElementById(id);
     if (field) field.value = String(value ?? '');
   });
-  originalContent.checked = Boolean(publishDraft.original);
   channelsHideLocation.checked = Boolean(publishDraft.channels_hide_location);
   channelsOriginal.checked = Boolean(publishDraft.channels_original);
   directPublishDouyin.checked = Boolean(publishDraft.direct_publish_douyin);
+  directPublishKuaishou.checked = Boolean(publishDraft.direct_publish_kuaishou);
   directPublishChannels.checked = Boolean(publishDraft.direct_publish_channels);
   directPublishBilibili.checked = Boolean(publishDraft.direct_publish_bilibili);
   scheduleEnabled.checked = Boolean(publishDraft.schedule_enabled);
+  const kuaishouDeclarationAliases = {
+    不添加声明: '',
+    无需添加内容声明: '',
+    请选择内容声明: '',
+    为作品添加补充说明: '',
+    内容由AI生成: '内容为AI生成',
+    内容为虚构演绎: '演绎情节，仅供娱乐',
+    内容为个人观点: '个人观点，仅供参考',
+    内容含营销推广信息: '',
+    素材来源于网络: '',
+  };
   Object.entries(publishDraft.declarations || {}).forEach(([name, value]) => {
     const select = document.querySelector(`.declaration-card select[name="${name}"]`);
-    if (select && [...select.options].some((option) => option.value === value)) select.value = value;
+    if (!select) return;
+    let normalized = name === 'declaration_kuaishou' ? (kuaishouDeclarationAliases[value] ?? value) : value;
+    if (name === 'declaration_kuaishou' && !normalized) normalized = '为作品添加补充说明';
+    const matched = [...select.options].find((option) => option.value === normalized || option.textContent === normalized);
+    if (matched) select.value = matched.value;
   });
   [
     ['title', 'titleCount', 100],
     ['titleDouyin', 'titleDouyinCount', 30],
-    ['titleXiaohongshu', 'titleXiaohongshuCount', 20],
+    ['titleKuaishou', 'titleKuaishouCount', 30],
     ['titleChannels', 'titleChannelsCount', 100],
     ['titleChannelsShort', 'titleChannelsShortCount', 16],
     ['titleBilibili', 'titleBilibiliCount', 80],
@@ -356,36 +351,36 @@ function refreshDouyinScheduleOptions(now = Date.now()) {
   updateDouyinScheduleValue();
 }
 
-function syncXiaohongshuScheduleControls() {
-  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(xiaohongshuScheduleTime.value);
-  xiaohongshuScheduleDate.value = match?.[1] || '';
-  xiaohongshuScheduleHour.value = match?.[2] || '';
-  xiaohongshuScheduleMinute.value = match?.[3] || '';
+function syncKuaishouScheduleControls() {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(kuaishouScheduleTime.value);
+  kuaishouScheduleDate.value = match?.[1] || '';
+  kuaishouScheduleHour.value = match?.[2] || '';
+  kuaishouScheduleMinute.value = match?.[3] || '';
 }
 
-function updateXiaohongshuScheduleValue() {
-  const date = xiaohongshuScheduleDate.value;
-  const hour = xiaohongshuScheduleHour.value;
-  const minute = xiaohongshuScheduleMinute.value;
-  xiaohongshuScheduleTime.value = date && hour && minute ? `${date}T${hour}:${minute}` : '';
+function updateKuaishouScheduleValue() {
+  const date = kuaishouScheduleDate.value;
+  const hour = kuaishouScheduleHour.value;
+  const minute = kuaishouScheduleMinute.value;
+  kuaishouScheduleTime.value = date && hour && minute ? `${date}T${hour}:${minute}` : '';
 }
 
-function refreshXiaohongshuScheduleOptions(now = Date.now()) {
+function refreshKuaishouScheduleOptions(now = Date.now()) {
   const minuteStep = 60 * 1000;
-  const minimumTimestamp = Math.ceil((now + 60 * 60 * 1000) / minuteStep) * minuteStep;
-  const maximumTimestamp = now + 15 * 24 * 60 * 60 * 1000;
+  const minimumTimestamp = Math.ceil((now + 5 * 60 * 1000) / minuteStep) * minuteStep;
+  const maximumTimestamp = now + 14 * 24 * 60 * 60 * 1000;
   const minimumValue = localDateTimeValue(new Date(minimumTimestamp));
   const maximumValue = localDateTimeValue(new Date(maximumTimestamp));
-  xiaohongshuScheduleDate.min = minimumValue.slice(0, 10);
-  xiaohongshuScheduleDate.max = maximumValue.slice(0, 10);
-  xiaohongshuScheduleTime.dataset.minimum = minimumValue;
-  xiaohongshuScheduleTime.dataset.maximum = maximumValue;
-  const date = xiaohongshuScheduleDate.value;
+  kuaishouScheduleDate.min = minimumValue.slice(0, 10);
+  kuaishouScheduleDate.max = maximumValue.slice(0, 10);
+  kuaishouScheduleTime.dataset.minimum = minimumValue;
+  kuaishouScheduleTime.dataset.maximum = maximumValue;
+  const date = kuaishouScheduleDate.value;
   const setOptionAvailability = (option, disabled) => {
     option.disabled = disabled;
     option.textContent = option.value;
   };
-  [...xiaohongshuScheduleHour.options].forEach((option) => {
+  [...kuaishouScheduleHour.options].forEach((option) => {
     if (!option.value || !date) {
       if (option.value) setOptionAvailability(option, false);
       return;
@@ -394,9 +389,9 @@ function refreshXiaohongshuScheduleOptions(now = Date.now()) {
     const hourEnd = new Date(`${date}T${option.value}:59`).getTime();
     setOptionAvailability(option, hourEnd < minimumTimestamp || hourStart > maximumTimestamp);
   });
-  if (xiaohongshuScheduleHour.selectedOptions[0]?.disabled) xiaohongshuScheduleHour.value = '';
-  const hour = xiaohongshuScheduleHour.value;
-  [...xiaohongshuScheduleMinute.options].forEach((option) => {
+  if (kuaishouScheduleHour.selectedOptions[0]?.disabled) kuaishouScheduleHour.value = '';
+  const hour = kuaishouScheduleHour.value;
+  [...kuaishouScheduleMinute.options].forEach((option) => {
     if (!option.value || !date || !hour) {
       if (option.value) setOptionAvailability(option, false);
       return;
@@ -404,8 +399,8 @@ function refreshXiaohongshuScheduleOptions(now = Date.now()) {
     const timestamp = new Date(`${date}T${hour}:${option.value}`).getTime();
     setOptionAvailability(option, timestamp < minimumTimestamp || timestamp > maximumTimestamp);
   });
-  if (xiaohongshuScheduleMinute.selectedOptions[0]?.disabled) xiaohongshuScheduleMinute.value = '';
-  updateXiaohongshuScheduleValue();
+  if (kuaishouScheduleMinute.selectedOptions[0]?.disabled) kuaishouScheduleMinute.value = '';
+  updateKuaishouScheduleValue();
 }
 
 function syncBilibiliScheduleControls() {
@@ -444,8 +439,8 @@ function updateScheduleUi() {
     const input = platformScheduleTimes[key];
     input.disabled = !active;
     if (key === 'bilibili') return;
-    const minimumLead = key === 'douyin' ? 2 * 60 * 60 * 1000 : key === 'xiaohongshu' ? 60 * 60 * 1000 : 5 * 60 * 1000;
-    const maximumDays = key === 'douyin' ? 14 : 15;
+    const minimumLead = key === 'douyin' ? 2 * 60 * 60 * 1000 : 5 * 60 * 1000;
+    const maximumDays = key === 'douyin' || key === 'kuaishou' ? 14 : 15;
     const minimum = new Date(Math.ceil((now + minimumLead) / minuteStep) * minuteStep);
     const maximum = new Date(now + maximumDays * 24 * 60 * 60 * 1000);
     if (key === 'douyin') {
@@ -458,14 +453,14 @@ function updateScheduleUi() {
       refreshDouyinScheduleOptions(now);
       return;
     }
-    if (key === 'xiaohongshu') {
-      xiaohongshuScheduleDate.disabled = !active;
-      xiaohongshuScheduleHour.disabled = !active;
-      xiaohongshuScheduleMinute.disabled = !active;
-      xiaohongshuScheduleDate.required = false;
-      xiaohongshuScheduleHour.required = false;
-      xiaohongshuScheduleMinute.required = false;
-      refreshXiaohongshuScheduleOptions(now);
+    if (key === 'kuaishou') {
+      kuaishouScheduleDate.disabled = !active;
+      kuaishouScheduleHour.disabled = !active;
+      kuaishouScheduleMinute.disabled = !active;
+      kuaishouScheduleDate.required = false;
+      kuaishouScheduleHour.required = false;
+      kuaishouScheduleMinute.required = false;
+      refreshKuaishouScheduleOptions(now);
       return;
     }
     input.required = false;
@@ -516,8 +511,8 @@ function scheduledTimeError() {
     if (!effectiveValue) return `请设置通用发布时间，或单独设置${platformName}发布时间`;
     const error = key === 'douyin'
       ? timeValueError(effectiveValue, platformName, 2 * 60 * 60 * 1000, 14)
-      : key === 'xiaohongshu'
-        ? timeValueError(effectiveValue, platformName, 60 * 60 * 1000, 15)
+      : key === 'kuaishou'
+        ? timeValueError(effectiveValue, platformName, 5 * 60 * 1000, 14)
         : timeValueError(effectiveValue, platformName);
     if (error) return error;
     if (key === 'bilibili' && Number(effectiveValue.slice(-2)) % 5 !== 0) return 'B站发布时间的分钟只能选择 00、05、10…55';
@@ -543,7 +538,6 @@ function selectedPlatforms() {
 }
 
 function platformCoverRatios(key) {
-  if (key === 'xiaohongshu') return [videoMetadata.width > videoMetadata.height ? '4:3' : '3:4'];
   if (key === 'channels' && videoMetadata.width > videoMetadata.height) return ['3:4', '4:3'];
   return COVER_REQUIREMENTS[key] || [];
 }
@@ -607,8 +601,8 @@ function renderPublishAccounts(accounts) {
     group.dataset.platform = key;
     const heading = document.createElement('header');
     const logo = document.createElement('span');
-    logo.className = `platform-logo ${key === 'xiaohongshu' ? 'xhs' : key === 'bilibili' ? 'bili' : key}`;
-    logo.textContent = key === 'douyin' ? '抖' : key === 'xiaohongshu' ? '小' : key === 'channels' ? '视' : 'B';
+    logo.className = `platform-logo ${PLATFORM_LOGOS[key].className}`;
+    logo.textContent = PLATFORM_LOGOS[key].text;
     const title = document.createElement('strong');
     const items = Array.isArray(accountsByPlatform[key]) ? accountsByPlatform[key] : [];
     title.textContent = `${PLATFORM_NAMES[key]} · ${items.length} 个账号`;
@@ -630,10 +624,7 @@ function renderPublishAccounts(accounts) {
         input.value = account.id;
         input.dataset.platform = key;
         input.disabled = !account.bound;
-        input.addEventListener('change', async () => {
-          if (key === 'xiaohongshu' && input.checked) {
-            if (!(await confirmXhsRisk())) input.checked = false;
-          }
+        input.addEventListener('change', () => {
           updateAccountSelectionUi();
         });
         const identity = document.createElement('span');
@@ -697,7 +688,7 @@ function updatePlatformTitleSummary() {
 function updatePlatformTitleCounts() {
   [
     ['titleDouyin', 'titleDouyinCount', 30],
-    ['titleXiaohongshu', 'titleXiaohongshuCount', 20],
+    ['titleKuaishou', 'titleKuaishouCount', 30],
     ['titleChannels', 'titleChannelsCount', 100],
     ['titleChannelsShort', 'titleChannelsShortCount', 16],
     ['titleBilibili', 'titleBilibiliCount', 80],
@@ -746,12 +737,6 @@ function updateCovers() {
     if (requiredText) requiredText.textContent = needed ? '整套选填' : '本次无需';
   });
   document.querySelectorAll('.cover-map-note span').forEach((item) => {
-    if (item.textContent.trim().startsWith('小红书：')) {
-      const current = videoMetadata.width && videoMetadata.height
-        ? `当前${videoMetadata.width > videoMetadata.height ? '横屏' : '竖屏'}视频使用 ${videoMetadata.width > videoMetadata.height ? '4:3' : '3:4'}`
-        : '横屏 4:3 / 竖屏 3:4';
-      item.textContent = `小红书：${current}`;
-    }
     if (item.textContent.trim().startsWith('视频号：')) {
       const current = videoMetadata.width && videoMetadata.height
         ? `当前${videoMetadata.width > videoMetadata.height ? '横屏视频使用 3:4 + 4:3' : '竖屏视频使用 3:4'}`
@@ -933,7 +918,7 @@ async function clearPublishForm() {
   [
     ['titleCount', 100],
     ['titleDouyinCount', 30],
-    ['titleXiaohongshuCount', 20],
+    ['titleKuaishouCount', 30],
     ['titleChannelsCount', 100],
     ['titleChannelsShortCount', 16],
     ['titleBilibiliCount', 80],
@@ -944,10 +929,10 @@ async function clearPublishForm() {
   document.querySelectorAll('.declaration-card select').forEach((select) => {
     select.selectedIndex = 0;
   });
-  originalContent.checked = false;
   channelsHideLocation.checked = false;
   channelsOriginal.checked = false;
   directPublishDouyin.checked = false;
+  directPublishKuaishou.checked = false;
   directPublishChannels.checked = false;
   directPublishBilibili.checked = false;
   scheduleEnabled.checked = false;
@@ -955,7 +940,7 @@ async function clearPublishForm() {
   commonScheduleTime.value = '';
   syncCommonScheduleControls();
   syncDouyinScheduleControls();
-  syncXiaohongshuScheduleControls();
+  syncKuaishouScheduleControls();
   syncBilibiliScheduleControls();
   updateScheduleUi();
 
@@ -1323,11 +1308,11 @@ douyinScheduleDate.addEventListener('click', () => openSchedulePicker(douyinSche
     updateDouyinScheduleValue();
   });
 });
-xiaohongshuScheduleDate.addEventListener('click', () => openSchedulePicker(xiaohongshuScheduleDate));
-[xiaohongshuScheduleDate, xiaohongshuScheduleHour, xiaohongshuScheduleMinute].forEach((field) => {
+kuaishouScheduleDate.addEventListener('click', () => openSchedulePicker(kuaishouScheduleDate));
+[kuaishouScheduleDate, kuaishouScheduleHour, kuaishouScheduleMinute].forEach((field) => {
   field.addEventListener('change', () => {
-    refreshXiaohongshuScheduleOptions();
-    updateXiaohongshuScheduleValue();
+    refreshKuaishouScheduleOptions();
+    updateKuaishouScheduleValue();
   });
 });
 bilibiliScheduleDate.addEventListener('click', () => openSchedulePicker(bilibiliScheduleDate));
@@ -1392,7 +1377,7 @@ document.addEventListener('click', async (event) => {
 [
   ['title', 'titleCount', 100],
   ['titleDouyin', 'titleDouyinCount', 30],
-  ['titleXiaohongshu', 'titleXiaohongshuCount', 20],
+  ['titleKuaishou', 'titleKuaishouCount', 30],
   ['titleChannels', 'titleChannelsCount', 100],
   ['titleChannelsShort', 'titleChannelsShortCount', 16],
   ['titleBilibili', 'titleBilibiliCount', 80],
@@ -1425,7 +1410,7 @@ form.addEventListener('submit', async (event) => {
   const selected = selectedPlatforms();
   if (!targets.length) return showToast('请至少勾选一个需要发布的账号', 'error');
   if (!video.files[0]) return showToast('请先选择视频文件', 'error');
-  if (selected.some((key) => key === 'xiaohongshu' || key === 'channels') && (!videoMetadata.width || !videoMetadata.height)) {
+  if (selected.includes('channels') && (!videoMetadata.width || !videoMetadata.height)) {
     return showToast('正在读取视频方向，请稍后再试', 'error');
   }
   for (const key of selected) {
@@ -1449,13 +1434,25 @@ form.addEventListener('submit', async (event) => {
     const details = incompleteCovers.map((item) => `${PLATFORM_NAMES[item.key]}还缺少${item.missing.join('、')}`).join('；');
     return showToast(`${details}。请补齐封面，或点击已选封面上的“删除封面”后使用平台默认封面`, 'error');
   }
+  updateCommonScheduleValue();
+  updateDouyinScheduleValue();
+  updateKuaishouScheduleValue();
+  updateBilibiliScheduleValue();
   const data = new FormData(form);
   data.set('schedule_timezone', Intl.DateTimeFormat().resolvedOptions().timeZone);
   data.set('targets', JSON.stringify(targets));
-  data.set('original', originalContent.checked ? 'true' : 'false');
+  data.set('schedule_enabled', scheduleEnabled.checked ? 'true' : 'false');
+  if (scheduleEnabled.checked) {
+    if (commonScheduleTime.value) data.set('scheduled_at', commonScheduleTime.value);
+    for (const [key, input] of Object.entries(platformScheduleTimes)) {
+      const effectiveValue = input.value || commonScheduleTime.value;
+      if (effectiveValue) data.set(`scheduled_at_${key}`, effectiveValue);
+    }
+  }
   data.set('channels_hide_location', channelsHideLocation.checked ? 'true' : 'false');
   data.set('channels_original', channelsOriginal.checked ? 'true' : 'false');
   data.set('direct_publish_douyin', directPublishDouyin.checked ? 'true' : 'false');
+  data.set('direct_publish_kuaishou', directPublishKuaishou.checked ? 'true' : 'false');
   data.set('direct_publish_channels', directPublishChannels.checked ? 'true' : 'false');
   data.set('direct_publish_bilibili', directPublishBilibili.checked ? 'true' : 'false');
   data.set('video_width', String(videoMetadata.width));
@@ -1493,13 +1490,13 @@ fillTimeSelect(commonScheduleHour, '时', Array.from({ length: 24 }, (_, index) 
 fillTimeSelect(commonScheduleMinute, '分', Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, '0')));
 fillTimeSelect(douyinScheduleHour, '时', Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0')));
 fillTimeSelect(douyinScheduleMinute, '分', Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0')));
-fillTimeSelect(xiaohongshuScheduleHour, '时', Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0')));
-fillTimeSelect(xiaohongshuScheduleMinute, '分', Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0')));
+fillTimeSelect(kuaishouScheduleHour, '时', Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0')));
+fillTimeSelect(kuaishouScheduleMinute, '分', Array.from({ length: 60 }, (_, index) => String(index).padStart(2, '0')));
 fillTimeSelect(bilibiliScheduleHour, '时', Array.from({ length: 24 }, (_, index) => String(index).padStart(2, '0')));
 fillTimeSelect(bilibiliScheduleMinute, '分', Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, '0')));
 syncCommonScheduleControls();
 syncDouyinScheduleControls();
-syncXiaohongshuScheduleControls();
+syncKuaishouScheduleControls();
 syncBilibiliScheduleControls();
 updateScheduleUi();
 scheduleLimitsTimer = setInterval(() => {

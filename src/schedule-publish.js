@@ -1,17 +1,18 @@
-import { safeClick } from "./browser-utils.js";
-import { scheduledTimeStatus } from "./platforms.js";
+import { dismissKuaishouPublishGuide, safeClick } from "./browser-utils.js";
+import { dismissKuaishouCoverApplyPrompt, waitAndDismissKuaishouCoverApplyPrompt } from "./cover-handlers.js";
+import { KUAISHOU_SCHEDULE_MAX_DAYS, scheduledTimeStatus } from "./platforms.js";
 import { DateTime } from 'luxon';
+
+const KUAISHOU_PUBLISH_TIME_CONTAINER_SELECTOR = '[class*="publish-time-container"]';
+const KUAISHOU_SCHEDULE_LABEL_SELECTOR = `${KUAISHOU_PUBLISH_TIME_CONTAINER_SELECTOR} label.ant-radio-wrapper:has(input.ant-radio-input[value="2"]):has-text("定时发布")`;
 
 const TOGGLE_SELECTORS = Object.freeze({
   douyin: [
     'label.radio-d4zkru:has(input.radio-native-p6VBGt[value="1"]):has-text("定时发布")',
     'label:has(input[value="1"]):has-text("定时发布")'
   ],
-  xiaohongshu: [
-    '.post-time-switch-container .d-switch-simulator:has(input[type="checkbox"][value="true"])',
-    '.post-time-wrapper .d-switch-simulator:has(input[type="checkbox"][value="true"])',
-    ".post-time-switch-container .custom-switch-card",
-    '.post-time-wrapper [class*="switch"]:has-text("定时发布")'
+  kuaishou: [
+    KUAISHOU_SCHEDULE_LABEL_SELECTOR
   ],
   bilibili: [
     '.time-container:has-text("定时发布") .switch-container',
@@ -33,11 +34,14 @@ const INPUT_SELECTORS = Object.freeze({
     '[class*="date"] input:not([type="checkbox"])',
     '[class*="time"] input:not([type="checkbox"])'
   ],
-  xiaohongshu: [
-    '.post-time-wrapper input:not([type="checkbox"])',
+  kuaishou: [
+    '.ant-picker input',
+    '.ant-picker-input input',
     'input[type="datetime-local"]',
     'input[placeholder*="日期"]',
-    'input[placeholder*="时间"]'
+    'input[placeholder*="时间"]',
+    '[class*="date"] input:not([type="checkbox"])',
+    '[class*="time"] input:not([type="checkbox"])'
   ],
   bilibili: [
     '.time-container input:not([type="checkbox"])',
@@ -105,7 +109,7 @@ async function findToggle(scopes, platformKey) {
   return null;
 }
 
-async function waitForToggle(page, scopes, platformKey, timeoutMs = 8_000) {
+async function waitForToggle(page, scopes, platformKey, timeoutMs = platformKey === "kuaishou" ? 15_000 : 8_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const toggle = await findToggle(scopes, platformKey);
@@ -147,6 +151,119 @@ async function enableDouyinScheduleToggle(page, toggle) {
     await page.waitForTimeout(80);
   }
   throw new Error("抖音“定时发布”选择框点击后没有变为选中状态");
+}
+
+function kuaishouPublishTimeContainer(page) {
+  return page.locator(KUAISHOU_PUBLISH_TIME_CONTAINER_SELECTOR).first();
+}
+
+function kuaishouScheduleLabel(page) {
+  const scoped = page.locator(KUAISHOU_SCHEDULE_LABEL_SELECTOR).first();
+  return scoped;
+}
+
+function kuaishouScheduleLabelFallback(page) {
+  return page.locator('label.ant-radio-wrapper:has(input.ant-radio-input[value="2"]):has-text("定时发布")').first();
+}
+
+async function resolveKuaishouScheduleLabel(page) {
+  const scoped = kuaishouScheduleLabel(page);
+  if (await scoped.count()) return scoped;
+  return kuaishouScheduleLabelFallback(page);
+}
+
+async function waitForKuaishouScheduleControl(page, log = () => {}, timeoutMs = 8_000) {
+  await dismissKuaishouCoverApplyPrompt(page, log).catch(() => false);
+  const existing = await resolveKuaishouScheduleLabel(page);
+  if (await existing.count() && await existing.isVisible({ timeout: 200 }).catch(() => false)) {
+    const radio = existing.locator('input.ant-radio-input[value="2"]').first();
+    if (!(await radio.isDisabled().catch(() => false))) return existing;
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  let waitingLogged = false;
+  while (Date.now() < deadline) {
+    await dismissKuaishouPublishGuide(page, 150).catch(() => {});
+    await scrollToKuaishouScheduleSection(page);
+    const label = await resolveKuaishouScheduleLabel(page);
+    if (!(await label.count())) {
+      if (!waitingLogged) {
+        log("正在等待快手发布设置区域出现");
+        waitingLogged = true;
+      }
+      await page.waitForTimeout(120);
+      continue;
+    }
+    if (!(await label.isVisible({ timeout: 150 }).catch(() => false))) {
+      await page.waitForTimeout(120);
+      continue;
+    }
+    const radio = label.locator('input.ant-radio-input[value="2"]').first();
+    if (await radio.isDisabled().catch(() => false)) {
+      if (!waitingLogged) {
+        log("快手发布设置已出现，正在等待视频处理完成后启用定时发布");
+        waitingLogged = true;
+      }
+      await page.waitForTimeout(120);
+      continue;
+    }
+    await label.scrollIntoViewIfNeeded().catch(() => {});
+    return label;
+  }
+  return null;
+}
+
+function kuaishouScheduleRadioDot(label) {
+  return label.locator("span.ant-radio .ant-radio-inner").first();
+}
+
+function kuaishouScheduleRadioControl(label) {
+  return label.locator("span.ant-radio").first();
+}
+
+async function isKuaishouScheduleEnabled(page) {
+  const label = await resolveKuaishouScheduleLabel(page);
+  if (await label.count()) {
+    const className = String(await label.getAttribute("class").catch(() => "") || "");
+    if (className.includes("ant-radio-wrapper-checked")) return true;
+  }
+  const picker = kuaishouPublishTimeContainer(page).locator(".ant-picker, .ant-picker-input").first();
+  return await picker.isVisible({ timeout: 200 }).catch(() => false);
+}
+
+async function scrollToKuaishouScheduleSection(page) {
+  for (const selector of ['text="发布设置"', 'text="发布时间"']) {
+    const anchor = page.locator(selector).first();
+    if (await anchor.isVisible({ timeout: 300 }).catch(() => false)) {
+      await anchor.scrollIntoViewIfNeeded().catch(() => {});
+      return;
+    }
+  }
+}
+
+async function enableKuaishouScheduleToggle(page, label) {
+  if (await isKuaishouScheduleEnabled(page)) return false;
+  await dismissKuaishouCoverApplyPrompt(page).catch(() => false);
+  await dismissKuaishouPublishGuide(page, 200).catch(() => {});
+  await scrollToKuaishouScheduleSection(page);
+  await label.scrollIntoViewIfNeeded().catch(() => {});
+
+  const radioControl = kuaishouScheduleRadioControl(label);
+  const deadline = Date.now() + 4_000;
+  while (Date.now() < deadline) {
+    if (await isKuaishouScheduleEnabled(page)) return true;
+    await dismissKuaishouCoverApplyPrompt(page).catch(() => false);
+    try {
+      if (await radioControl.count()) {
+        await safeClick(radioControl, "点击快手定时发布单选框", { force: true });
+      } else {
+        await safeClick(label, "点击快手定时发布单选框", { force: true });
+      }
+    } catch {}
+    await page.waitForTimeout(120);
+  }
+  if (await isKuaishouScheduleEnabled(page)) return true;
+  throw new Error("快手“定时发布”单选框点击后没有变为选中状态");
 }
 
 function inputKind(metadata, candidateCount) {
@@ -360,118 +477,6 @@ async function setDouyinScheduledPublish(page, parts) {
     await page.waitForTimeout(80);
   }
   throw new Error(`抖音时间选择后未显示 ${parts.datetime}`);
-}
-
-async function xhsPanelMonth(popover) {
-  const labels = popover.locator(".d-datepicker-selector h6");
-  if (await labels.count() < 2) return null;
-  const year = Number.parseInt((await labels.nth(0).innerText()).replace(/\D/g, ""), 10);
-  const month = Number.parseInt((await labels.nth(1).innerText()).replace(/\D/g, ""), 10);
-  if (!Number.isInteger(year) || !Number.isInteger(month)) return null;
-  return { year, month, stamp: year * 12 + month - 1 };
-}
-
-async function selectXhsDate(page, popover, parts) {
-  const [targetYear, targetMonth, targetDay] = parts.date.split("-").map(Number);
-  const targetStamp = targetYear * 12 + targetMonth - 1;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const current = await xhsPanelMonth(popover);
-    if (!current) throw new Error("小红书日期面板未显示有效的年份和月份");
-    if (current.stamp === targetStamp) {
-      const cells = popover.locator(".d-datepicker-dates .d-datepicker-cell.d-clickable:not(.disabled)");
-      for (let index = 0; index < await cells.count(); index += 1) {
-        const cell = cells.nth(index);
-        if ((await cell.innerText()).trim() !== String(targetDay)) continue;
-        const className = String(await cell.getAttribute("class") || "");
-        if (!className.includes("picked")) await safeClick(cell, `选择小红书定时发布日期 ${parts.date}`);
-        return true;
-      }
-      throw new Error(`小红书当前不允许选择日期 ${parts.date}`);
-    }
-    const arrows = popover.locator(".d-datepicker-header > .--space-p-extra-small .d-clickable");
-    const arrowIndex = targetStamp > current.stamp ? 2 : 1;
-    if (await arrows.count() <= arrowIndex) throw new Error(`小红书日期面板无法切换到 ${targetYear}年${targetMonth}月`);
-    await safeClick(arrows.nth(arrowIndex), "切换小红书定时发布月份");
-    await page.waitForTimeout(120);
-  }
-  throw new Error(`小红书日期面板未能切换到 ${targetYear}年${targetMonth}月`);
-}
-
-async function selectXhsTimeColumn(page, popover, columnIndex, targetValue, label) {
-  const columns = popover.locator(".d-timepicker-timebar");
-  if (await columns.count() <= columnIndex) throw new Error(`小红书时间面板未找到${label}列表`);
-  const column = columns.nth(columnIndex);
-  const options = column.locator(".d-timepicker-time.d-clickable");
-  for (let index = 0; index < await options.count(); index += 1) {
-    const option = options.nth(index);
-    if (wheelNumber(await option.innerText()) !== targetValue) continue;
-    const className = String(await option.getAttribute("class") || "");
-    if (!className.includes("active")) await safeClick(option, `选择小红书定时发布${label} ${targetValue}`);
-    const deadline = Date.now() + 500;
-    while (Date.now() < deadline) {
-      const active = column.locator(".d-timepicker-time.active").first();
-      if (await active.count() && wheelNumber(await active.innerText()) === targetValue) return true;
-      await page.waitForTimeout(80);
-    }
-    // 小红书偶尔不会及时把 active 类同步到被点击项，最终以外层日期时间输入框的值为准。
-    return true;
-  }
-  throw new Error(`小红书${label}列表未找到 ${targetValue}`);
-}
-
-async function closeXhsSchedulePicker(page, popover) {
-  try {
-    if (page.isClosed() || !(await popover.isVisible({ timeout: 200 }).catch(() => false))) return true;
-    const box = await popover.boundingBox({ timeout: 500 }).catch(() => null);
-    if (!box) return true;
-    const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight })).catch(() => null);
-    if (!viewport) return true;
-    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-    const candidates = [
-      { x: box.x + box.width + 90, y: box.y + 110 },
-      { x: box.x - 70, y: box.y + 110 },
-      { x: box.x + box.width + 45, y: box.y + 180 }
-    ].map(point => ({ x: clamp(point.x, 12, viewport.width - 12), y: clamp(point.y, 12, viewport.height - 12) }));
-    for (const point of candidates) {
-      const safe = await page.evaluate(({ x, y }) => {
-        const target = document.elementFromPoint(x, y);
-        if (!target || target.closest(".post-time-date-picker-popover-class")) return false;
-        return !target.closest('button,a,input,textarea,select,label,[role="button"],[role="combobox"],[contenteditable="true"]');
-      }, point).catch(() => false);
-      if (!safe) continue;
-      await page.mouse.click(point.x, point.y).catch(() => {});
-      await page.waitForTimeout(150).catch(() => {});
-      return true;
-    }
-    return true;
-  } catch {
-    // 时间值已验证正确；弹层或页面在善后阶段被小红书销毁时不应把任务误判为失败。
-    return true;
-  }
-}
-
-async function setXhsScheduledPublish(page, parts) {
-  const input = await waitVisibleLocator(page, [
-    ".post-time-wrapper input.d-text:not([type=\"checkbox\"])",
-    ".post-time-wrapper input.d-text"
-  ]);
-  if (!input) throw new Error("小红书已开启定时发布，但未找到日期时间输入框");
-  await safeClick(input, "打开小红书日期时间选择面板");
-  const popover = await waitVisibleLocator(page, [".post-time-date-picker-popover-class"]);
-  if (!popover) throw new Error("小红书日期时间输入框点击后未弹出选择面板");
-  await selectXhsDate(page, popover, parts);
-  const [hour, minute] = parts.time.split(":");
-  await selectXhsTimeColumn(page, popover, 0, hour, "小时");
-  await selectXhsTimeColumn(page, popover, 1, minute, "分钟");
-  const deadline = Date.now() + 2_000;
-  while (Date.now() < deadline) {
-    if (String(await input.inputValue().catch(() => "")).trim() === parts.datetime) {
-      await closeXhsSchedulePicker(page, popover);
-      return true;
-    }
-    await page.waitForTimeout(80);
-  }
-  throw new Error(`小红书时间选择后未显示 ${parts.datetime}`);
 }
 
 async function waitBiliPickerOption(page, selectors, acceptedTexts, timeoutMs = 5_000, scope = page) {
@@ -860,6 +865,320 @@ async function closeChannelsSchedulePicker(page, scopes, panel) {
   throw new Error("视频号定时发布时间已选择，但日期时间面板未能自动关闭");
 }
 
+async function waitForKuaishouPickerDropdown(page, timeoutMs = 8_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const dropdowns = page.locator(".ant-picker-dropdown");
+    for (let index = 0; index < await dropdowns.count(); index += 1) {
+      const dropdown = dropdowns.nth(index);
+      if (!(await dropdown.isVisible({ timeout: 80 }).catch(() => false))) continue;
+      const panel = dropdown.locator(".ant-picker-panel").first();
+      if (await panel.isVisible({ timeout: 80 }).catch(() => false)) return dropdown;
+    }
+    await page.waitForTimeout(120);
+  }
+  return null;
+}
+
+async function kuaishouPickerMonth(dropdown) {
+  const yearText = (await dropdown.locator(".ant-picker-year-btn").first().innerText().catch(() => "")).replace(/\D/g, "");
+  const monthText = (await dropdown.locator(".ant-picker-month-btn").first().innerText().catch(() => "")).replace(/\D/g, "");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+  return { year, month, stamp: year * 12 + month - 1 };
+}
+
+async function clickKuaishouMonthNav(dropdown, movingForward) {
+  const selectors = movingForward
+    ? [".ant-picker-header-next-btn", ".ant-picker-header-super-next-btn"]
+    : [".ant-picker-header-prev-btn", ".ant-picker-header-super-prev-btn"];
+  for (const selector of selectors) {
+    const button = dropdown.locator(selector).first();
+    if (!(await button.isVisible({ timeout: 120 }).catch(() => false))) continue;
+    if (await button.isDisabled().catch(() => false)) continue;
+    await safeClick(button, movingForward ? "切换快手定时发布到下一个月" : "切换快手定时发布到上一个月");
+    await dropdown.page().waitForTimeout(220);
+    return true;
+  }
+  return false;
+}
+
+async function waitForKuaishouSelectableDay(dropdown, date, timeoutMs = 4_000) {
+  const selector = `.ant-picker-cell[title="${date}"]:not(.ant-picker-cell-disabled)`;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const cell = dropdown.locator(selector).first();
+    if (await cell.isVisible({ timeout: 150 }).catch(() => false)) return cell;
+    await dropdown.page().waitForTimeout(120);
+  }
+  return null;
+}
+
+async function navigateKuaishouDate(page, dropdown, parts) {
+  const [targetYear, targetMonth] = parts.date.split("-").map(Number);
+  const targetStamp = targetYear * 12 + targetMonth - 1;
+
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const current = await kuaishouPickerMonth(dropdown);
+    if (!current) throw new Error("快手日期面板未显示有效的年份和月份");
+    if (current.stamp === targetStamp) break;
+    const moved = await clickKuaishouMonthNav(dropdown, current.stamp < targetStamp);
+    if (!moved) throw new Error(`快手日期面板无法切换到 ${targetYear}年${targetMonth}月`);
+  }
+
+  const current = await kuaishouPickerMonth(dropdown);
+  if (!current || current.stamp !== targetStamp) {
+    throw new Error(`快手日期面板未切换到 ${targetYear}年${targetMonth}月`);
+  }
+
+  let dayCell = await waitForKuaishouSelectableDay(dropdown, parts.date);
+  if (!dayCell) {
+    const refreshed = await kuaishouPickerMonth(dropdown);
+    if (refreshed && refreshed.stamp !== targetStamp) {
+      await clickKuaishouMonthNav(dropdown, refreshed.stamp < targetStamp);
+      await page.waitForTimeout(220);
+    }
+    dayCell = await waitForKuaishouSelectableDay(dropdown, parts.date, 2_000);
+  }
+  if (!dayCell) {
+    throw new Error(
+      `快手当前不允许选择日期 ${parts.date}。请确认时间在平台允许的 ${KUAISHOU_SCHEDULE_MAX_DAYS} 天内；若目标日期在下个月，需先切换月份后再选择。`
+    );
+  }
+
+  const className = String(await dayCell.getAttribute("class") || "");
+  if (!className.includes("ant-picker-cell-selected")) {
+    await safeClick(dayCell, `选择快手定时发布日期 ${parts.date}`);
+    await page.waitForTimeout(200);
+  }
+}
+
+async function readKuaishouPickerHeaderTime(dropdown) {
+  return String(await dropdown.locator(".ant-picker-time-panel .ant-picker-header-view").first().innerText().catch(() => "")).trim();
+}
+
+async function isKuaishouTimeColumnSelected(column, targetValue) {
+  const selected = column.locator(".ant-picker-time-panel-cell-selected .ant-picker-time-panel-cell-inner").first();
+  if (!(await selected.count())) return false;
+  return wheelNumber(await selected.innerText()) === wheelNumber(targetValue);
+}
+
+async function kuaishouTimeColumnMatchingIndexes(column, normalizedTarget) {
+  const options = column.locator(".ant-picker-time-panel-cell-inner");
+  const matchingIndexes = [];
+  for (let index = 0; index < await options.count(); index += 1) {
+    if (wheelNumber(await options.nth(index).innerText()) === normalizedTarget) matchingIndexes.push(index);
+  }
+  return matchingIndexes;
+}
+
+async function scrollKuaishouTimeOptionIntoView(option) {
+  await option.evaluate(element => {
+    const cell = element.closest(".ant-picker-time-panel-cell") || element.closest("li") || element;
+    cell.scrollIntoView({ block: "center", inline: "nearest" });
+  }).catch(() => {});
+  await option.scrollIntoViewIfNeeded().catch(() => {});
+}
+
+async function activateKuaishouTimeOption(page, option) {
+  await scrollKuaishouTimeOptionIntoView(option);
+  await option.evaluate(element => {
+    const cell = element.closest(".ant-picker-time-panel-cell") || element.closest("li");
+    if (!cell) {
+      element.click();
+      return;
+    }
+    for (const type of ["pointerdown", "mousedown", "mouseup", "click"]) {
+      cell.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+    }
+    element.click();
+  }).catch(() => {});
+  const cell = option.locator("xpath=ancestor::li[contains(@class,'ant-picker-time-panel-cell')]").first();
+  const target = (await cell.count()) ? cell : option;
+  const box = await target.boundingBox().catch(() => null);
+  if (box) {
+    await page.mouse.click(box.x + Math.max(2, box.width / 2), box.y + Math.max(2, box.height / 2));
+  }
+  await safeClick(target, "选择快手定时发布时间项", { force: true }).catch(() => {});
+}
+
+async function selectKuaishouTimeColumn(page, dropdown, columnIndex, targetValue, label) {
+  const normalizedTarget = wheelNumber(targetValue);
+  if (!normalizedTarget) throw new Error(`快手${label}无效：${targetValue}`);
+
+  const deadline = Date.now() + 8_000;
+  while (Date.now() < deadline) {
+    const columns = dropdown.locator(".ant-picker-time-panel-column");
+    if (await columns.count() <= columnIndex) {
+      await page.waitForTimeout(120);
+      continue;
+    }
+    const column = columns.nth(columnIndex);
+    if (await isKuaishouTimeColumnSelected(column, normalizedTarget)) return true;
+
+    const option = column.locator(".ant-picker-time-panel-cell-inner").filter({
+      hasText: new RegExp(`^${normalizedTarget}$`)
+    }).first();
+    if (await option.count()) {
+      await activateKuaishouTimeOption(page, option);
+      await dropdown.page().waitForTimeout(220);
+      if (await isKuaishouTimeColumnSelected(column, normalizedTarget)) return true;
+    }
+
+    const matchingIndexes = await kuaishouTimeColumnMatchingIndexes(column, normalizedTarget);
+    if (!matchingIndexes.length) {
+      await page.waitForTimeout(120);
+      continue;
+    }
+
+    const options = column.locator(".ant-picker-time-panel-cell-inner");
+    for (const targetIndex of matchingIndexes) {
+      if (await isKuaishouTimeColumnSelected(column, normalizedTarget)) return true;
+      await activateKuaishouTimeOption(page, options.nth(targetIndex));
+      await dropdown.page().waitForTimeout(220);
+      if (await isKuaishouTimeColumnSelected(column, normalizedTarget)) return true;
+    }
+    await page.waitForTimeout(120);
+  }
+  throw new Error(`快手${label}未能选择为 ${normalizedTarget}`);
+}
+
+async function writeKuaishouScheduleInput(page, input, fullDatetime) {
+  await input.click({ clickCount: 3 }).catch(() => {});
+  await page.keyboard.press("Control+A").catch(() => {});
+  await page.waitForTimeout(80);
+  try {
+    await page.keyboard.type(fullDatetime, { delay: 20 });
+    await page.waitForTimeout(120);
+    const typed = await readKuaishouScheduleInputValue(input);
+    if (typed.includes(fullDatetime.slice(0, 16))) return typed;
+  } catch {}
+  return writeInput(input, fullDatetime);
+}
+
+function kuaishouScheduleValueMatches(value, parts, fullDatetime) {
+  const normalized = String(value || "").trim().replace(/\s+/g, " ");
+  const expected = `${parts.date} ${parts.time}`;
+  if (normalized === fullDatetime || normalized.startsWith(`${expected}:`)) return true;
+  const match = /^(\d{4}-\d{2}-\d{2})\s+(\d{2}):(\d{2})/.exec(normalized);
+  if (!match) return false;
+  const [, date, hour, minute] = match;
+  const [targetHour, targetMinute] = parts.time.split(":");
+  return date === parts.date && hour === targetHour && minute === targetMinute;
+}
+
+async function applyKuaishouPickerTime(page, dropdown, input, hour, minute, second, fullDatetime, parts) {
+  const expectedHeaderTime = `${wheelNumber(hour)}:${wheelNumber(minute)}:${wheelNumber(second)}`;
+  await selectKuaishouTimeColumn(page, dropdown, 0, hour, "小时");
+  await selectKuaishouTimeColumn(page, dropdown, 1, minute, "分钟");
+  await selectKuaishouTimeColumn(page, dropdown, 2, second, "秒");
+
+  let headerTime = await readKuaishouPickerHeaderTime(dropdown);
+  if (headerTime.startsWith(expectedHeaderTime)) return headerTime;
+
+  await writeKuaishouScheduleInput(page, input, fullDatetime);
+  await page.waitForTimeout(250);
+  dropdown = await waitForKuaishouPickerDropdown(page, 1_500) || dropdown;
+  headerTime = await readKuaishouPickerHeaderTime(dropdown);
+  if (headerTime.startsWith(expectedHeaderTime)) return headerTime;
+
+  const inputValue = await readKuaishouScheduleInputValue(input);
+  if (kuaishouScheduleValueMatches(inputValue, parts, fullDatetime)) return expectedHeaderTime;
+
+  throw new Error(`快手时间面板显示为 ${headerTime || inputValue || "空"}，预期 ${expectedHeaderTime}`);
+}
+
+async function confirmKuaishouPicker(page, dropdown) {
+  const okButton = dropdown.locator('.ant-picker-ok button, .ant-picker-footer .ant-btn-primary').filter({ hasText: "确定" }).first();
+  if (!(await okButton.isVisible({ timeout: 500 }).catch(() => false))) {
+    throw new Error("快手日期时间面板未找到确定按钮");
+  }
+  await safeClick(okButton, "确认快手定时发布时间");
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    if (!(await dropdown.isVisible({ timeout: 80 }).catch(() => false))) return true;
+    await page.waitForTimeout(80);
+  }
+  throw new Error("快手定时发布时间确认后选择面板仍未关闭");
+}
+
+async function waitForKuaishouScheduleInput(page, timeoutMs = 12_000) {
+  const selectors = [
+    ".ant-picker-input input",
+    ".ant-picker input",
+    'input[placeholder*="时间"]',
+    'input[placeholder*="日期"]'
+  ];
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const container = kuaishouPublishTimeContainer(page);
+    if (await container.count()) {
+      for (const selector of selectors) {
+        const candidate = container.locator(selector).first();
+        if (await candidate.count() && await candidate.isVisible({ timeout: 120 }).catch(() => false)) return candidate;
+      }
+    }
+    const fallback = await waitVisibleLocator(page, selectors, 200);
+    if (fallback) return fallback;
+    await page.waitForTimeout(150);
+  }
+  return null;
+}
+
+async function readKuaishouScheduleInputValue(input) {
+  return String(await input.inputValue().catch(async () => await input.evaluate(element => {
+    if (element instanceof HTMLInputElement) return element.value;
+    const nested = element.querySelector("input");
+    return nested ? nested.value : element.textContent;
+  }))).trim();
+}
+
+async function setKuaishouScheduledPublish(page, parts, log = () => {}) {
+  const [hour, minute] = parts.time.split(":");
+  const second = "00";
+  const fullDatetime = `${parts.datetime}:${second}`;
+
+  const input = await waitForKuaishouScheduleInput(page, 8_000);
+  if (!input) throw new Error("快手已开启定时发布，但未找到日期时间输入框");
+
+  await dismissKuaishouCoverApplyPrompt(page, log).catch(() => false);
+  await safeClick(input, "打开快手日期时间选择面板");
+  await dismissKuaishouCoverApplyPrompt(page, log).catch(() => false);
+
+  let dropdown = await waitForKuaishouPickerDropdown(page, 2_000);
+  if (!dropdown) {
+    await writeKuaishouScheduleInput(page, input, fullDatetime);
+    const typed = await readKuaishouScheduleInputValue(input);
+    if (kuaishouScheduleValueMatches(typed, parts, fullDatetime)) return true;
+    await safeClick(input, "再次打开快手日期时间选择面板");
+    await dismissKuaishouCoverApplyPrompt(page, log).catch(() => false);
+    dropdown = await waitForKuaishouPickerDropdown(page, 3_000);
+  }
+  if (!dropdown) throw new Error("快手日期时间输入框点击后未弹出选择面板");
+
+  await dismissKuaishouCoverApplyPrompt(page, log).catch(() => false);
+  await navigateKuaishouDate(page, dropdown, parts);
+  dropdown = await waitForKuaishouPickerDropdown(page, 1_000) || dropdown;
+  await applyKuaishouPickerTime(page, dropdown, input, hour, minute, second, fullDatetime, parts);
+  dropdown = await waitForKuaishouPickerDropdown(page, 1_000) || dropdown;
+  const expectedHeaderTime = `${wheelNumber(hour)}:${wheelNumber(minute)}:${wheelNumber(second)}`;
+  const headerTime = await readKuaishouPickerHeaderTime(dropdown);
+  if (!headerTime.startsWith(expectedHeaderTime)) {
+    throw new Error(`快手确认前时间面板显示为 ${headerTime || "空"}，预期 ${expectedHeaderTime}`);
+  }
+  await dismissKuaishouCoverApplyPrompt(page, log).catch(() => false);
+  await confirmKuaishouPicker(page, dropdown);
+
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const value = await readKuaishouScheduleInputValue(input);
+    if (kuaishouScheduleValueMatches(value, parts, fullDatetime)) return true;
+    await page.waitForTimeout(80);
+  }
+  throw new Error(`快手时间选择后未显示 ${fullDatetime}`);
+}
+
 async function setChannelsScheduledPublish(page, scopes, parts) {
   let panel = await waitForChannelsPanel(page, scopes, 250);
   if (!panel) {
@@ -900,21 +1219,30 @@ export async function setScheduledPublish(page, platform, rawValue, log = () => 
     ? submittedDouyinScheduleParts(rawValue)
     : scheduledDisplayParts(rawValue, Date.now(), timezone);
   const scopes = scopesFor(page, platform.key);
-  const toggle = await waitForToggle(page, scopes, platform.key);
-  if (!toggle) throw new Error(`${platform.name}未找到定时发布开关`);
-  if (platform.key === "douyin") {
-    const clicked = await enableDouyinScheduleToggle(page, toggle);
-    if (clicked) log("已点击并选中定时发布选择框");
-  } else if (!(await alreadyEnabled(toggle))) {
-    await safeClick(toggle, `开启${platform.name}定时发布`);
+  if (platform.key === "kuaishou") {
+    await dismissKuaishouCoverApplyPrompt(page, log).catch(() => false);
+    const label = await waitForKuaishouScheduleControl(page, log);
+    if (!label) throw new Error("快手未找到定时发布单选框，请确认发布设置已显示且视频处理完成");
+    if (await isKuaishouScheduleEnabled(page)) {
+      log("快手定时发布单选框已是选中状态，跳过点击");
+    } else {
+      log("正在点击快手定时发布单选框");
+      await enableKuaishouScheduleToggle(page, label);
+      log("已点击并选中快手定时发布单选框");
+    }
+    await dismissKuaishouCoverApplyPrompt(page, log).catch(() => false);
+  } else {
+    const toggle = await waitForToggle(page, scopes, platform.key);
+    if (!toggle) throw new Error(`${platform.name}未找到定时发布开关`);
+    if (platform.key === "douyin") {
+      const clicked = await enableDouyinScheduleToggle(page, toggle);
+      if (clicked) log("已点击并选中定时发布选择框");
+    } else if (!(await alreadyEnabled(toggle))) {
+      await safeClick(toggle, `开启${platform.name}定时发布`);
+    }
   }
   if (platform.key === "douyin") {
     await setDouyinScheduledPublish(page, parts);
-    log(`已选择定时发布时间：${parts.datetime}`);
-    return true;
-  }
-  if (platform.key === "xiaohongshu") {
-    await setXhsScheduledPublish(page, parts);
     log(`已选择定时发布时间：${parts.datetime}`);
     return true;
   }
@@ -926,6 +1254,11 @@ export async function setScheduledPublish(page, platform, rawValue, log = () => 
   if (platform.key === "channels") {
     await setChannelsScheduledPublish(page, scopes, parts);
     log(`已选择定时发布时间：${parts.datetime}`);
+    return true;
+  }
+  if (platform.key === "kuaishou") {
+    await setKuaishouScheduledPublish(page, parts, log);
+    log(`已选择定时发布时间：${parts.datetime}:00`);
     return true;
   }
   const inputs = await waitForInputs(page, scopes, platform.key);

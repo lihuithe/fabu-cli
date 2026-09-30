@@ -1,8 +1,8 @@
-export const IMAGE_TEXT_PLATFORM_KEYS = Object.freeze(["douyin", "xiaohongshu", "channels"]);
+export const IMAGE_TEXT_PLATFORM_KEYS = Object.freeze(["douyin", "kuaishou", "channels"]);
 
 export const IMAGE_TEXT_TITLE_LIMITS = Object.freeze({
   douyin: 30,
-  xiaohongshu: 20,
+  kuaishou: 30,
   channels: 100
 });
 
@@ -38,28 +38,27 @@ export const IMAGE_TEXT_PLATFORMS = Object.freeze({
     contents: ["div.zone-container.editor-kit-container", 'div[contenteditable="true"]'],
     titleRequired: true
   },
-  xiaohongshu: {
-    key: "xiaohongshu",
-    name: "小红书",
-    url: "https://creator.xiaohongshu.com/publish/publish?source=official",
+  kuaishou: {
+    key: "kuaishou",
+    name: "快手",
+    url: "https://cp.kuaishou.com/article/publish/atlas",
     modeSelectors: [
-      '[role="tab"]:has-text("上传图文")',
-      'button:has-text("上传图文")',
-      'div[class*="tab"]:has-text("上传图文")',
+      'a:has-text("发布图文")',
+      'button:has-text("发布图文")',
+      '[role="tab"]:has-text("图文")',
       'div[class*="tab"]:has-text("图文")'
     ],
-    modeTexts: ["上传图文", "图文笔记", "图文"],
+    modeTexts: ["发布图文", "图文"],
     imageInputs: [
-      'input.upload-input[type="file"][accept*="image"]',
-      'input.upload-input[type="file"][accept*=".jpg"]',
+      'input[type="file"][accept*="image"]',
       'input[type="file"][accept*=".jpg"]',
       'input[type="file"][accept*=".jpeg"]',
-      'div[class*="upload"] input[type="file"][accept*="image"]',
-      'input[type="file"][accept*="image"]'
+      'input[type="file"][multiple][accept*=".jpg"]',
+      'input[type="file"][multiple][accept*=".png"]'
     ],
-    titles: ['div.plugin.title-container input.d-text', ".input.titleInput", 'input[placeholder*="标题"]'],
-    contents: [".ql-editor", 'div[contenteditable="true"]'],
-    titleRequired: true
+    titles: [],
+    contents: ["#work-description-edit", 'div[contenteditable="true"]', 'textarea[placeholder*="描述"]', "textarea"],
+    titleRequired: false
   },
   channels: {
     key: "channels",
@@ -110,4 +109,8 @@ export function channelsImageTextContent(content, rawTopics = []) {
     .map(topic => `#${topic}`)
     .join(" ");
   return [String(content ?? "").trim(), topicLine].filter(Boolean).join("\n");
+}
+
+export function kuaishouImageTextContent(_title, content, _rawTopics = []) {
+  return String(content ?? "").trim();
 }

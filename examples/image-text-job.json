@@ -13,9 +13,9 @@
   },
   "targets": [
     {
-      "platform": "xiaohongshu",
+      "platform": "douyin",
       "account_id": "replace-with-account-id",
-      "declaration": "笔记含AI合成内容"
+      "declaration": "内容由AI生成"
     }
   ]
 }

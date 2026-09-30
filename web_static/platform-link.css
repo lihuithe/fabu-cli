@@ -72,7 +72,8 @@
 .platform-title-field label i{margin-left:auto;color:#9ca2af;font-size:9px;font-style:normal;font-weight:400}
 .platform-title-field .form-control{padding:7px 8px;font-size:11px}
 .title-dot{width:7px;height:7px;margin-right:5px;border-radius:50%;background:#7f8796}
-.title-dot.douyin{background:#25262b}.title-dot.xhs{background:#ef5a66}.title-dot.channels{background:#21a675}.title-dot.bili{background:#39a9df}
+.title-dot.douyin{background:#25262b}.title-dot.kuaishou{background:#ff4906}.title-dot.xhs{background:#ef5a66}.title-dot.channels{background:#21a675}.title-dot.bili{background:#39a9df}
+.platform-logo.kuaishou{background:#ff4906}
 .platform-title-modal-actions{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 22px;border-top:1px solid #eceef4;background:#fafbfe}
 .platform-title-modal-actions>span{display:flex;align-items:center;gap:8px}
 .platform-title-modal-actions button{min-width:76px;padding:8px 14px;border-radius:7px;font-size:11px;font-weight:600;transition:.18s}
@@ -84,8 +85,9 @@
 .platform-title-save:hover{transform:translateY(-1px);box-shadow:0 6px 15px rgba(102,126,234,.28)}
 body.platform-title-modal-open{overflow:hidden}
 
-.topic-input-grid{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(280px,1.2fr);gap:10px;margin-top:10px}
+.topic-input-grid{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:10px;margin-top:10px}
 .topic-input-field{min-width:0}
+.topic-input-field .form-control{width:100%;min-width:0;max-width:100%}
 .topic-input-field .field-label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 5px}
 .topic-input-field .field-label span{color:#9299a8;font-size:9px;font-weight:400;white-space:nowrap}
 .topic-field-hint{display:block;margin:5px 7px 0;color:#9299a8;font-size:9px;line-height:1.4}
@@ -159,7 +161,7 @@ body.platform-title-modal-open{overflow:hidden}
 .original-option-copy strong,.original-option-copy small{display:block}
 .original-option-copy strong{font-size:12px;color:#444b5c}
 .original-option-copy small{margin-top:2px;color:#9298a7;font-size:10px}
-.publish-extra-settings{display:grid;grid-template-columns:minmax(300px,.85fr) minmax(570px,1.65fr);gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid #eef0f4}
+.publish-extra-settings{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.65fr);gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid #eef0f4}
 .publish-location-setting,.direct-publish-setting{min-width:0;padding:12px;border:1px solid #e2e5ed;border-radius:10px;background:#fafbfe}
 .publish-setting-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:9px}
 .publish-setting-heading label,.publish-setting-heading strong{margin:0;color:#444b5c;font-size:12px;font-weight:700}
@@ -236,10 +238,6 @@ body.platform-title-modal-open{overflow:hidden}
 @keyframes notice-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 
 .completion-modal{position:fixed;inset:0;z-index:2200;display:grid;place-items:center;padding:20px;background:rgba(28,31,39,.42);backdrop-filter:blur(2px)}
-.xhs-risk-modal{position:fixed;inset:0;z-index:2300;display:grid;place-items:center;padding:20px;background:rgba(28,31,39,.44);backdrop-filter:blur(3px)}
-.xhs-risk-modal[hidden]{display:none}.xhs-risk-dialog{display:grid;width:min(430px,100%);grid-template-columns:42px minmax(0,1fr);gap:12px;padding:20px;border:1px solid #e4e7ee;border-radius:14px;background:#fff;box-shadow:0 24px 70px rgba(22,29,45,.25)}
-.xhs-risk-icon{display:grid;width:42px;height:42px;place-items:center;border-radius:11px;background:#fff3dd;color:#b87612;font-size:20px;font-weight:800}.xhs-risk-copy h2{margin:1px 0 7px;color:#343a48;font-size:15px}.xhs-risk-copy p{margin:0;color:#747c8c;font-size:11px;line-height:1.7}
-.xhs-risk-dialog footer{display:flex;grid-column:2;justify-content:flex-end;gap:8px;margin-top:5px}.xhs-risk-dialog footer button{min-width:78px;padding:8px 12px;border:1px solid #dfe2e9;border-radius:7px;background:#fff;color:#697181;font-size:10px;font-weight:650}.xhs-risk-dialog footer button:last-child{border-color:#d99a34;background:#d99a34;color:#fff}.xhs-risk-dialog footer button:last-child:hover{background:#c98a27}.xhs-risk-open{overflow:hidden}
 .completion-modal[hidden]{display:none}
 .completion-dialog{width:min(430px,100%);padding:28px;border-radius:14px;background:#fff;text-align:center;box-shadow:0 22px 70px rgba(22,29,45,.24)}
 .completion-icon{width:54px;height:54px;margin:0 auto 14px;display:grid;place-items:center;border-radius:50%;background:#e8f8ef;color:#23905c;font-size:25px;font-weight:700}

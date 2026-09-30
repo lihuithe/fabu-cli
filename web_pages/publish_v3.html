@@ -39,30 +39,25 @@
       <section class="panel">
         <div class="panel-head"><div><span class="flow-number">2</span><h2>选择本次发布账号</h2></div><span class="section-tip">同一平台可同时勾选多个账号</span></div>
         <div class="publish-account-groups" id="accountTargetList"><div class="account-list-loading">正在读取已绑定账号…</div></div>
-        <div class="manual-note"><b>按账号选择 · 全部并行执行</b><span>每个勾选的账号会使用自己的独立登录状态，并打开一个独立 Chrome 窗口；默认停留在发布准备页，可为指定平台开启直接发布。</span></div>
+        <div class="manual-note"><b>按账号选择 · 全部并行执行</b><span>每个勾选的账号会使用自己的独立登录状态，并打开一个独立 Chrome 窗口；各平台默认停留在发布准备页，可为指定平台开启直接发布。</span></div>
       </section>
       <section class="panel">
         <div class="panel-head"><div><span class="flow-number">3</span><h2>上传封面与选择声明</h2></div><span class="section-tip">封面选填，不上传则使用平台默认封面</span></div>
         <div class="cover-grid">
-          <label class="cover-card" data-ratio="3:4"><span class="ratio-preview vertical"><b>3:4</b></span><strong>竖版封面</strong><small class="cover-use">用于：抖音、竖屏小红书、视频号</small><input name="cover_3_4" type="file" accept="image/*"><span class="choose-cover">选择图片</span><span class="cover-required">选填</span><button type="button" class="remove-cover" aria-label="删除 3:4 封面" hidden>删除封面</button></label>
-          <label class="cover-card" data-ratio="4:3"><span class="ratio-preview landscape"><b>4:3</b></span><strong>横版封面</strong><small class="cover-use">用于：抖音、横屏小红书、横屏视频号、B站</small><input name="cover_4_3" type="file" accept="image/*"><span class="choose-cover">选择图片</span><span class="cover-required">选填</span><button type="button" class="remove-cover" aria-label="删除 4:3 封面" hidden>删除封面</button></label>
+          <label class="cover-card" data-ratio="3:4"><span class="ratio-preview vertical"><b>3:4</b></span><strong>竖版封面</strong><small class="cover-use">用于：抖音、快手、视频号</small><input name="cover_3_4" type="file" accept="image/*"><span class="choose-cover">选择图片</span><span class="cover-required">选填</span><button type="button" class="remove-cover" aria-label="删除 3:4 封面" hidden>删除封面</button></label>
+          <label class="cover-card" data-ratio="4:3"><span class="ratio-preview landscape"><b>4:3</b></span><strong>横版封面</strong><small class="cover-use">用于：抖音、横屏视频号、B站</small><input name="cover_4_3" type="file" accept="image/*"><span class="choose-cover">选择图片</span><span class="cover-required">选填</span><button type="button" class="remove-cover" aria-label="删除 4:3 封面" hidden>删除封面</button></label>
           <label class="cover-card" data-ratio="16:9"><span class="ratio-preview wide"><b>16:9</b></span><strong>宽屏封面</strong><small class="cover-use">用于：B站</small><input name="cover_16_9" type="file" accept="image/*"><span class="choose-cover">选择图片</span><span class="cover-required">选填</span><button type="button" class="remove-cover" aria-label="删除 16:9 封面" hidden>删除封面</button></label>
         </div>
-        <div class="cover-map-note"><b>平台封面规则（整套选填）</b><span>抖音：3:4 + 4:3</span><span>小红书：横屏 4:3 / 竖屏 3:4</span><span>视频号：横屏 3:4 + 4:3 / 竖屏 3:4</span><span>B站：4:3 + 16:9</span></div>
+        <div class="cover-map-note"><b>平台封面规则（整套选填）</b><span>抖音：3:4 + 4:3</span><span>快手：3:4</span><span>视频号：横屏 3:4 + 4:3 / 竖屏 3:4</span><span>B站：4:3 + 16:9</span></div>
         <div class="declaration-section">
           <div class="declaration-heading"><div><strong>平台内容声明</strong><small>每个平台使用各自的声明名称与选项</small></div></div>
           <div class="declaration-grid">
             <div class="declaration-card" data-platform="douyin"><div class="declaration-title"><span class="platform-logo douyin">抖</span><div><strong>抖音</strong><small>自主声明</small></div></div><select class="form-select" name="declaration_douyin" aria-label="抖音自主声明"><option>无需添加自主声明</option><option>内容由AI生成</option><option>内容为个人观点或见解</option><option>内容为转载信息</option><option>内容含营销推广信息</option><option>虚构演绎，仅供娱乐</option></select></div>
-            <div class="declaration-card" data-platform="xiaohongshu"><div class="declaration-title"><span class="platform-logo xhs">小</span><div><strong>小红书</strong><small>添加内容类型声明</small></div></div><select class="form-select" name="declaration_xiaohongshu" aria-label="小红书内容类型声明"><option>无需内容标注</option><option>虚构演绎，仅供娱乐</option><option>笔记含AI合成内容</option><option>内容包含营销广告</option><option>内容来源声明</option></select></div>
+            <div class="declaration-card" data-platform="kuaishou"><div class="declaration-title"><span class="platform-logo kuaishou">快</span><div><strong>快手</strong><small>为作品添加补充说明</small></div></div><select class="form-select" name="declaration_kuaishou" aria-label="快手内容声明"><option selected>为作品添加补充说明</option><option>内容为AI生成</option><option>演绎情节，仅供娱乐</option><option>个人观点，仅供参考</option></select></div>
             <div class="declaration-card" data-platform="channels"><div class="declaration-title"><span class="platform-logo channels">视</span><div><strong>视频号</strong><small>内容标注</small></div></div><select class="form-select" name="declaration_channels" aria-label="视频号内容标注"><option>无需标注</option><option>含AI生成内容</option><option>内容为虚构剧情，仅供娱乐</option><option>个人观点，仅供参考</option><option>内容包含营销广告</option><option>内容为自行拍摄</option></select></div>
             <div class="declaration-card" data-platform="bilibili"><div class="declaration-title"><span class="platform-logo bili">B</span><div><strong>B站</strong><small>创作声明</small></div></div><select class="form-select" name="declaration_bilibili" aria-label="B站创作声明"><option>内容无需标注</option><option>含AI生成内容</option><option>含虚构演绎内容</option><option>内容含营销信息</option><option>个人观点，仅供参考</option><option>内容为转载</option></select></div>
           </div>
           <div class="publish-setting-options">
-            <label class="original-option" for="originalContent">
-              <input id="originalContent" name="original" type="checkbox" value="true">
-              <span class="original-check" aria-hidden="true">✓</span>
-              <span class="original-option-copy"><strong>小红书声明原创</strong><small>勾选后，仅同步至小红书的原创声明</small></span>
-            </label>
             <label class="original-option" for="channelsHideLocation">
               <input id="channelsHideLocation" name="channels_hide_location" type="checkbox" value="true">
               <span class="original-check" aria-hidden="true">✓</span>
@@ -86,6 +81,12 @@
                   <input id="directPublishDouyin" name="direct_publish_douyin" type="checkbox" value="true">
                   <span class="platform-logo douyin">抖</span>
                   <span class="direct-publish-copy"><strong>抖音</strong><small>填写完成后点击发布</small></span>
+                  <span class="direct-publish-switch" aria-hidden="true"><i></i></span>
+                </label>
+                <label class="direct-publish-option" for="directPublishKuaishou">
+                  <input id="directPublishKuaishou" name="direct_publish_kuaishou" type="checkbox" value="true">
+                  <span class="platform-logo kuaishou">快</span>
+                  <span class="direct-publish-copy"><strong>快手</strong><small>填写完成后点击发布</small></span>
                   <span class="direct-publish-switch" aria-hidden="true"><i></i></span>
                 </label>
                 <label class="direct-publish-option" for="directPublishChannels">
@@ -140,14 +141,14 @@
               <input id="douyinScheduleTime" name="scheduled_at_douyin" type="hidden" disabled>
             </div>
           </div>
-          <div class="schedule-time-field" data-platform="xiaohongshu">
-            <label class="field-label" for="xiaohongshuScheduleTime">小红书发布时间</label>
+          <div class="schedule-time-field" data-platform="kuaishou">
+            <label class="field-label" for="kuaishouScheduleTime">快手发布时间</label>
             <div class="platform-datetime-control">
-              <input class="form-control" id="xiaohongshuScheduleDate" type="date" aria-label="小红书发布日期" disabled>
-              <select class="form-select" id="xiaohongshuScheduleHour" aria-label="小红书发布小时" disabled></select>
+              <input class="form-control" id="kuaishouScheduleDate" type="date" aria-label="快手发布日期" disabled>
+              <select class="form-select" id="kuaishouScheduleHour" aria-label="快手发布小时" disabled></select>
               <span class="platform-time-separator">:</span>
-              <select class="form-select" id="xiaohongshuScheduleMinute" aria-label="小红书发布分钟" disabled></select>
-              <input id="xiaohongshuScheduleTime" name="scheduled_at_xiaohongshu" type="hidden" disabled>
+              <select class="form-select" id="kuaishouScheduleMinute" aria-label="快手发布分钟" disabled></select>
+              <input id="kuaishouScheduleTime" name="scheduled_at_kuaishou" type="hidden" disabled>
             </div>
           </div>
           <div class="schedule-time-field" data-platform="channels">
@@ -174,7 +175,7 @@
           <header class="platform-title-modal-head"><div><span class="platform-title-modal-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6.5h16M4 12h10M4 17.5h7"/><path d="m17 15 3 3-3 3M20 18h-6"/></svg></span><span><h2 id="platformTitleModalTitle">自定义平台标题</h2><p>留空的平台将自动使用通用标题</p></span></div><button type="button" id="platformTitleClose" aria-label="关闭自定义平台标题">×</button></header>
           <div class="platform-title-grid">
             <div class="platform-title-field" data-platform="douyin"><label for="titleDouyin"><span class="title-dot douyin"></span>抖音标题 <i id="titleDouyinCount">0 / 30</i></label><input class="form-control" id="titleDouyin" name="title_douyin" maxlength="30" placeholder="留空则使用通用标题，最多30字"></div>
-            <div class="platform-title-field" data-platform="xiaohongshu"><label for="titleXiaohongshu"><span class="title-dot xhs"></span>小红书标题 <i id="titleXiaohongshuCount">0 / 20</i></label><input class="form-control" id="titleXiaohongshu" name="title_xiaohongshu" maxlength="20" placeholder="留空则使用通用标题，最多20字"></div>
+            <div class="platform-title-field" data-platform="kuaishou"><label for="titleKuaishou"><span class="title-dot kuaishou"></span>快手标题 <i id="titleKuaishouCount">0 / 30</i></label><input class="form-control" id="titleKuaishou" name="title_kuaishou" maxlength="30" placeholder="留空则使用通用标题，最多30字"></div>
             <div class="platform-title-field" data-platform="channels"><label for="titleChannels"><span class="title-dot channels"></span>视频号标题 <i id="titleChannelsCount">0 / 100</i></label><input class="form-control" id="titleChannels" name="title_channels" maxlength="100" placeholder="留空则使用通用标题"></div>
             <div class="platform-title-field" data-platform="channels"><label for="titleChannelsShort"><span class="title-dot channels"></span>视频号短标题 <i id="titleChannelsShortCount">0 / 16</i></label><input class="form-control" id="titleChannelsShort" name="short_title_channels" maxlength="16" placeholder="选填，最多16字，逗号自动转为空格"></div>
             <div class="platform-title-field" data-platform="bilibili"><label for="titleBilibili"><span class="title-dot bili"></span>B站标题 <i id="titleBilibiliCount">0 / 80</i></label><input class="form-control" id="titleBilibili" name="title_bilibili" maxlength="80" placeholder="留空则使用通用标题，最多80字"></div>
@@ -185,13 +186,6 @@
     </form>
   </div></main>
   <div class="completion-modal" id="completionModal" hidden><div class="completion-dialog" role="dialog" aria-modal="true" aria-labelledby="completionTitle"><div class="completion-icon">✓</div><h2 id="completionTitle">平台处理完成</h2><p id="completionMessage">所选平台的视频上传与资料填写已完成</p><div class="completion-results" id="completionResults"></div><button type="button" id="completionClose">知道了</button></div></div>
-  <div class="xhs-risk-modal" id="xhsRiskModal" hidden>
-    <section class="xhs-risk-dialog" role="alertdialog" aria-modal="true" aria-labelledby="xhsRiskTitle" aria-describedby="xhsRiskDescription">
-      <span class="xhs-risk-icon" aria-hidden="true">!</span>
-      <div class="xhs-risk-copy"><h2 id="xhsRiskTitle">小红书账号风控风险提示</h2><p id="xhsRiskDescription">小红书平台存在账号风控风险，不建议使用本工具登录或发布。如果仍要继续，请自行承担可能发生的账号限制、验证或封禁等风险。</p></div>
-      <footer><button id="xhsRiskCancel" type="button">取消</button><button id="xhsRiskContinue" type="button">了解风险，继续</button></footer>
-    </section>
-  </div>
   <div class="platform-notice-stack" id="platformNoticeStack" aria-live="polite"></div>
   <script src="/static/publish-v3.js"></script>
 </body>

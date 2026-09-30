@@ -2,9 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
 import { bindingManager, chromePath, hasVisibleLoginPrompt, LOGIN_INVALID_MESSAGE } from "./account-binding.js";
-import { appendTopics, fillFirst, safeClick, setChannelsLocationHidden, setChannelsOriginalIfAvailable, setRights, visibleFirst, visibleUploadError } from "./browser-utils.js";
+import { appendTopics, dismissKuaishouPublishGuide, fillFirst, safeClick, setChannelsLocationHidden, setChannelsOriginalIfAvailable, setRights, visibleFirst, visibleUploadError } from "./browser-utils.js";
 import { centerPublishWindow, fillChannelsShortTitle } from "./runner.js";
-import { channelsImageTextContent, IMAGE_TEXT_PLATFORMS } from "./image-text-platforms.js";
+import { channelsImageTextContent, IMAGE_TEXT_PLATFORMS, kuaishouImageTextContent } from "./image-text-platforms.js";
 import { createPlatformWindowCloseGuard, normalizePlatformWindowError } from "./platform-window.js";
 import { setScheduledPublish } from "./schedule-publish.js";
 
@@ -208,78 +208,6 @@ async function openChannelsImageTextMode(page, platform) {
   return null;
 }
 
-async function visibleXiaohongshuDeclarationTrigger(page, timeoutMs = 5_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const placeholder = page.getByText("添加内容类型声明", { exact: true });
-    for (let index = 0; index < Math.min(await placeholder.count(), 8); index += 1) {
-      const candidate = placeholder.nth(index);
-      if (!(await candidate.isVisible({ timeout: 80 }).catch(() => false))) continue;
-      const trigger = candidate.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " d-select-wrapper ")][1]');
-      if (await trigger.count()) return trigger.first();
-    }
-    await delay(120);
-  }
-  return null;
-}
-
-async function xiaohongshuDeclarationSelected(page, declaration) {
-  const values = page.locator(".d-select-wrapper.custom-select-44 .d-select-content");
-  for (let index = 0; index < Math.min(await values.count(), 12); index += 1) {
-    const value = values.nth(index);
-    if (!(await value.isVisible({ timeout: 80 }).catch(() => false))) continue;
-    if ((await value.innerText({ timeout: 200 }).catch(() => "")).trim() === declaration) return true;
-  }
-  return false;
-}
-
-export async function setXiaohongshuImageDeclaration(page, declaration) {
-  if (!declaration || declaration === "无需内容标注") return true;
-  if (await xiaohongshuDeclarationSelected(page, declaration)) return true;
-
-  const trigger = await visibleXiaohongshuDeclarationTrigger(page);
-  if (!trigger) return false;
-  const main = trigger.locator(".d-select-main").first();
-  if (!(await main.isVisible({ timeout: 500 }).catch(() => false))) return false;
-  await safeClick(main, "打开小红书图文内容类型声明");
-
-  let dropdown = null;
-  const dropdownDeadline = Date.now() + 3_000;
-  while (Date.now() < dropdownDeadline && !dropdown) {
-    const dropdowns = page.locator(".declaration-drop-down");
-    for (let index = 0; index < Math.min(await dropdowns.count(), 8); index += 1) {
-      const candidate = dropdowns.nth(index);
-      if (await candidate.isVisible({ timeout: 80 }).catch(() => false)) {
-        dropdown = candidate;
-        break;
-      }
-    }
-    if (!dropdown) await delay(100);
-  }
-  if (!dropdown) return false;
-
-  const choices = dropdown.getByText(declaration, { exact: true });
-  let choice = null;
-  for (let index = 0; index < Math.min(await choices.count(), 8); index += 1) {
-    const candidate = choices.nth(index);
-    if (await candidate.isVisible({ timeout: 80 }).catch(() => false)) {
-      choice = candidate;
-      break;
-    }
-  }
-  if (!choice) return false;
-
-  const optionName = choice.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " d-option-name ")][1]');
-  await safeClick(await optionName.count() ? optionName.first() : choice, `选择小红书图文声明：${declaration}`, { timeout: 5_000 });
-
-  const selectedDeadline = Date.now() + 4_000;
-  while (Date.now() < selectedDeadline) {
-    if (await xiaohongshuDeclarationSelected(page, declaration)) return true;
-    await delay(120);
-  }
-  return false;
-}
-
 export async function openImageTextMode(page, platform) {
   if (platform.key === "channels") return openChannelsImageTextMode(page, platform);
   const context = page.context();
@@ -373,6 +301,13 @@ export class ImageTextChromeRunner {
     throw new ImageTextLoginExpiredError(LOGIN_INVALID_MESSAGE);
   }
 
+  async #dismissKuaishouGuide(page, platform, job, timeoutMs = 250) {
+    if (platform.key !== "kuaishou") return false;
+    if (!(await dismissKuaishouPublishGuide(page, timeoutMs))) return false;
+    this.log(`[${platform.name}/${job.account}] 已关闭首次发布作品指引`);
+    return true;
+  }
+
   async #waitForForm(page, platform, job, timeoutMs = 180_000) {
     const deadline = Date.now() + timeoutMs;
     let uploadReady = !platform.uploadReadySelectors?.length;
@@ -381,6 +316,7 @@ export class ImageTextChromeRunner {
       await this.#markExpiredLogin(page, platform, job);
       const uploadError = await visibleUploadError(page);
       if (uploadError) throw new Error(`图片上传失败：${uploadError}`);
+      await this.#dismissKuaishouGuide(page, platform, job);
       if (!uploadReady && await visibleFirst(page, platform.uploadReadySelectors, 100)) uploadReady = true;
       if (uploadReady && await visibleFirst(page, [...platform.titles, ...platform.contents], 100)) return true;
       await delay(350);
@@ -408,6 +344,17 @@ export class ImageTextChromeRunner {
 
   async #fillContent(page, platform, job) {
     this.#stage(job, "filling", "正在填写图文标题、正文与话题");
+    if (platform.key === "kuaishou") {
+      this.#stage(job, "filling", "正在填写图文简介与话题");
+      await this.#dismissKuaishouGuide(page, platform, job, 4_000);
+      const content = kuaishouImageTextContent(job.title, job.content);
+      if (content && !(await fillFirst(page, platform.contents, content, true))) throw new Error("快手图文正文填写失败");
+      if (!(await appendTopics(page, platform, job.topics, topic => {
+        this.log(`[${platform.name}/${job.account}] 平台拒绝添加标签“${topic}”，已跳过`);
+      }))) throw new Error("快手话题填写失败");
+      await this.#dismissKuaishouGuide(page, platform, job, 1_500);
+      return;
+    }
     const titleField = await visibleFirst(page, platform.titles, platform.titleRequired ? 10_000 : 1_200);
     if (titleField) {
       if (!(await fillFirst(page, platform.titles, job.title))) throw new Error(`${platform.name}标题填写失败`);
@@ -428,7 +375,7 @@ export class ImageTextChromeRunner {
   }
 
   async #saveLoginState(context, platform, job) {
-    if (platform.key !== "channels") return;
+    if (platform.key !== "channels" && platform.key !== "kuaishou") return;
     try {
       await bindingManager.saveRuntimeState(context, platform.key, job.accountId);
       this.log(`[${platform.name}/${job.account}] 图文发布页登录状态已保存`);
@@ -492,17 +439,7 @@ export class ImageTextChromeRunner {
       this.#throwIfCancelled();
       await this.#fillContent(page, platform, job);
       this.#stage(job, "rights", `正在设置${platform.name}内容声明`);
-      if (platform.key === "xiaohongshu") {
-        await setRights(page, { ...job, declaration: "无需内容标注" }, this.log, platform);
-        if (job.declaration !== "无需内容标注") {
-          if (!(await setXiaohongshuImageDeclaration(page, job.declaration))) {
-            throw new Error(`小红书图文内容类型声明设置失败：未能选中“${job.declaration}”`);
-          }
-          this.log(`[${platform.name}/${job.account}] 已同步图文内容类型声明：${job.declaration}`);
-        }
-      } else {
-        await setRights(page, job, this.log, platform);
-      }
+      await setRights(page, job, this.log, platform);
       if (platform.key === "channels" && job.channelsOriginal) {
         this.#stage(job, "original", "正在设置视频号原创声明");
         const originalResult = await setChannelsOriginalIfAvailable(page);

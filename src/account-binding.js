@@ -22,14 +22,7 @@ fs.mkdirSync(ACCOUNT_ASSET_ROOT, { recursive: true });
 
 const LOGIN_SELECTORS = {
   douyin: ["div.name-_lSSDc", 'div[class*="userName"]', 'div[class*="nickname"]', "div.unique_id-EuH8eA"],
-  xiaohongshu: [
-    ".user-info .name-box",
-    ".user-info .account-name",
-    '[class*="user-info"] [class*="name-box"]',
-    '[class*="user-info"] [class*="account-name"]',
-    '[class*="user-name"]',
-    '[class*="nickname"]'
-  ],
+  kuaishou: [".user-info-name", ".user-name", '[class*="user-name"]', '[class*="nickname"]', '[class*="userName"]'],
   channels: ["div.finder-info-container h2.finder-nickname", "h2.finder-nickname", ".weui-desktop-account__nickname", '[class*="finder-nickname"]', '[class*="nickname"]'],
   bilibili: [
     ".header-avatar-wrap .user-name",
@@ -40,12 +33,7 @@ const LOGIN_SELECTORS = {
 };
 const AVATAR_SELECTORS = {
   douyin: ['img[class*="avatar"]', '[class*="avatar"] img', '[class*="avatar"]', 'header img[src*="avatar"]'],
-  xiaohongshu: [
-    ".user-info img.user_avatar",
-    '.user-info img[class*="avatar"]',
-    'img.user_avatar',
-    '[class*="user-info"] img[class*="avatar"]'
-  ],
+  kuaishou: [".user-avatar img", 'img[class*="avatar"]', '[class*="avatar"] img', '[class*="avatar"]'],
   channels: ["div.finder-info-container img.avatar", 'img[class*="avatar"]', '[class*="avatar"] img', '[class*="avatar"]', ".weui-desktop-account img"],
   bilibili: [
     ".header-avatar-wrap img",
@@ -56,39 +44,57 @@ const AVATAR_SELECTORS = {
 };
 const LOGIN_COOKIES = {
   douyin: new Set(["sessionid", "sessionid_ss", "sid_guard"]),
-  xiaohongshu: new Set(["web_session", "access-token-creator.xiaohongshu.com", "customer-sso-sid", "galaxy_creator_session_id"]),
+  kuaishou: new Set(["passToken", "kuaishou.server.web_st", "kuaishou.server.webat", "kuaishou.web.cp.api_st"]),
   channels: new Set(["sessionid", "session_id", "finder_biz_login"]),
   bilibili: new Set(["SESSDATA"])
 };
+const KUAISHOU_QR_READY_SELECTORS = [
+  'text="快手APP，扫码登录"',
+  'text="打开快手APP 扫一扫登录"',
+  'text="打开快手APP扫一扫登录"',
+  'text="请使用快手APP扫码"'
+];
+const KUAISHOU_QR_SWITCH_SELECTORS = [
+  'text="扫码登录"',
+  'text=扫码登录',
+  'text="二维码登录"',
+  '[class*="qrcode"]:has-text("扫码登录")',
+  '[class*="qr-code"]:has-text("扫码登录")',
+  '[class*="qrCode"]:has-text("扫码登录")',
+  '[class*="qrcode"]',
+  '[class*="qr-code"]',
+  '[class*="qrCode"]'
+];
 const LOGIN_FOCUS_SELECTORS = {
   douyin: ['article:has-text("扫码登录")', 'input[placeholder="请输入手机号"]', 'text="扫码登录"', '[class*="qrcode"]', '[class*="qr-code"]', '[class*="login"] canvas'],
-  xiaohongshu: ['input[placeholder="手机号"]', ".login-box-container", ".sso-login-wrapper", '[class*="qrcode"]', '[class*="qr-code"]', '[class*="login"]'],
+  kuaishou: [...KUAISHOU_QR_READY_SELECTORS, '[class*="qrcode"] img', '[class*="qr-code"] img', 'img[src*="qr"]', '[class*="login"] canvas'],
   channels: ['text="扫码登录"', 'text="微信扫码登录"', '[class*="qrcode"]', '[class*="qr_code"]', ".login-container", "canvas"],
   bilibili: ['img[alt="Scan me!"]', ".login-scan__qrcode", '[class*="qrcode"]', '[class*="qr-code"]', '[class*="login"] canvas']
 };
 const LOGIN_EXPIRED_SELECTORS = {
   douyin: ['article:has-text("扫码登录")', 'text="扫码登录"', 'input[placeholder="请输入手机号"]', 'input[placeholder*="手机号"]', '[class*="login"] [class*="qrcode"]', '[class*="login"] canvas'],
-  xiaohongshu: ['input[placeholder="手机号"]', 'input[placeholder*="手机号"]', ".login-box-container", ".sso-login-wrapper", '[class*="login"] [class*="qrcode"]', '[class*="login"] canvas'],
+  kuaishou: ['text="快手APP，扫码登录"', 'text="打开快手APP 扫一扫登录"', 'text="扫码登录"', 'input[placeholder*="手机号"]', '[class*="qrcode"]', '[class*="login"] canvas'],
   channels: ['text="微信扫码登录"', 'text="扫码登录"', ".login-container", '[class*="login"] [class*="qrcode"]', '[class*="login"] canvas'],
   bilibili: ['img[alt="Scan me!"]', ".login-scan__qrcode", 'input[placeholder*="账号"]', 'input[placeholder*="密码"]', '[class*="login"] [class*="qrcode"]']
 };
 const LOGIN_EXPIRED_URLS = {
   douyin: [/\/login(?:[/?#]|$)/i, /passport\.(?:douyin|bytedance)\.com/i],
-  xiaohongshu: [/\/(?:new\/)?login(?:[/?#]|$)/i, /\/sso(?:[/?#]|$)/i],
+  kuaishou: [/passport\.kuaishou\.com/i, /id\.kuaishou\.com/i, /\/login(?:[/?#]|$)/i],
   channels: [/\/login(?:[./?#]|$)/i],
   bilibili: [/passport\.bilibili\.com/i, /\/login(?:[/?#]|$)/i]
 };
 const LOGIN_INSTRUCTIONS = Object.freeze({
   douyin: "扫码登录",
-  xiaohongshu: "手机号和验证码登录",
+  kuaishou: "快手APP扫码登录",
   channels: "微信扫码登录",
   bilibili: "扫码或账号登录"
 });
 export const BINDING_URLS = Object.freeze({
+  kuaishou: "https://passport.kuaishou.com/pc/account/login/",
   channels: "https://channels.weixin.qq.com"
 });
 const PROFILE_URLS = Object.freeze({
-  xiaohongshu: "https://creator.xiaohongshu.com/new/home",
+  kuaishou: "https://cp.kuaishou.com/profile",
   bilibili: "https://member.bilibili.com/platform/home"
 });
 export const BINDING_WINDOW = Object.freeze({
@@ -319,13 +325,32 @@ async function hasLoginMarker(page, key) {
   return Boolean(await visibleText(page, LOGIN_SELECTORS[key]));
 }
 
+async function kuaishouRedirectBlocked(page) {
+  try {
+    return await page.getByText("跳转地址不合法").first().isVisible({ timeout: 250 });
+  } catch {
+    return false;
+  }
+}
+
+async function openKuaishouCreatorHome(page) {
+  if (page.isClosed()) return false;
+  if (!(await kuaishouRedirectBlocked(page)) && /cp\.kuaishou\.com/i.test(page.url())) return true;
+  try {
+    await page.goto("https://cp.kuaishou.com/", { waitUntil: "domcontentloaded", timeout: 45_000 });
+    return !(await kuaishouRedirectBlocked(page));
+  } catch {
+    return false;
+  }
+}
+
 async function hasPlatformLogin(page, context, key) {
+  if (key === "kuaishou" && await kuaishouRedirectBlocked(page)) return false;
   if (await hasLoginMarker(page, key)) return true;
   try {
     if ((await context.cookies()).some(cookie => LOGIN_COOKIES[key].has(cookie.name))) return true;
   } catch {}
   if (key === "douyin") return false;
-  if (key === "xiaohongshu" && page.url().toLowerCase().includes("/new/home")) return true;
   return Boolean(await findVideoInput(page, PLATFORMS[key], 800));
 }
 
@@ -348,16 +373,89 @@ export async function hasVisibleLoginPrompt(page, key) {
   return false;
 }
 
+async function firstVisibleLocator(page, selectors, timeout = 150) {
+  for (const selector of selectors) {
+    try {
+      const candidates = page.locator(selector);
+      for (let index = 0; index < Math.min(await candidates.count(), 8); index += 1) {
+        const candidate = candidates.nth(index);
+        if (await candidate.isVisible({ timeout })) return candidate;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+async function kuaishouQrLoginVisible(page) {
+  return Boolean(await firstVisibleLocator(page, KUAISHOU_QR_READY_SELECTORS));
+}
+
+async function switchKuaishouToQrLogin(page) {
+  if (await kuaishouQrLoginVisible(page)) return true;
+  for (const selector of KUAISHOU_QR_SWITCH_SELECTORS) {
+    const target = await firstVisibleLocator(page, [selector]);
+    if (!target) continue;
+    try {
+      await target.click({ timeout: 1_200, force: true });
+      const deadline = Date.now() + 4_000;
+      while (Date.now() < deadline) {
+        if (await kuaishouQrLoginVisible(page)) return true;
+        await page.waitForTimeout(200);
+      }
+    } catch {}
+  }
+  return kuaishouQrLoginVisible(page);
+}
+
+async function centerKuaishouLoginCard(locator) {
+  try {
+    await locator.evaluate(element => {
+      const card = (() => {
+        let node = element;
+        for (let depth = 0; depth < 12 && node && node !== document.body; depth += 1) {
+          const rect = node.getBoundingClientRect();
+          const text = (node.innerText || "").replace(/\s+/g, "");
+          if (rect.width >= 220 && rect.width <= 560 && rect.height >= 240 && rect.height <= 780 && /快手APP.*扫码登录|打开快手APP/.test(text)) return node;
+          node = node.parentElement;
+        }
+        return element;
+      })();
+      card.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+      const box = card.getBoundingClientRect();
+      window.scrollBy({
+        left: box.left + box.width / 2 - window.innerWidth / 2,
+        top: box.top + box.height / 2 - window.innerHeight / 2,
+        behavior: "instant"
+      });
+      const after = card.getBoundingClientRect();
+      if (Math.abs(after.left + after.width / 2 - window.innerWidth / 2) > 36 || Math.abs(after.top + after.height / 2 - window.innerHeight / 2) > 36) {
+        card.style.position = "fixed";
+        card.style.left = "50%";
+        card.style.top = "50%";
+        card.style.right = "auto";
+        card.style.bottom = "auto";
+        card.style.transform = "translate(-50%, -50%)";
+        card.style.zIndex = "2147483646";
+        card.style.margin = "0";
+      }
+    });
+  } catch {
+    await locator.scrollIntoViewIfNeeded({ timeout: 1_500 }).catch(() => {});
+  }
+}
+
 export async function focusLoginArea(page, key, timeoutMs = 12_000) {
   const deadline = Date.now() + timeoutMs;
   do {
+    if (key === "kuaishou") await switchKuaishouToQrLogin(page);
     for (const selector of LOGIN_FOCUS_SELECTORS[key] ?? []) {
       try {
         const candidates = page.locator(selector);
         for (let index = 0; index < Math.min(await candidates.count(), 8); index += 1) {
           const candidate = candidates.nth(index);
           if (await candidate.isVisible({ timeout: 150 })) {
-            await candidate.scrollIntoViewIfNeeded({ timeout: 1_500 });
+            if (key === "kuaishou") await centerKuaishouLoginCard(candidate);
+            else await candidate.scrollIntoViewIfNeeded({ timeout: 1_500 });
             return true;
           }
         }
@@ -391,7 +489,7 @@ export class AccountBindingManager {
         remark: record.remark || "",
         avatar: storedAvatar(record),
         bound_at: record.bound_at || "",
-        profile_needs_refresh: (key === "xiaohongshu" || key === "bilibili") && !record.profile_checked_at
+        profile_needs_refresh: key === "bilibili" && !record.profile_checked_at
       };
     })]));
   }
@@ -498,10 +596,21 @@ export class AccountBindingManager {
       });
       const deadline = Date.now() + 300_000;
       while (Date.now() < deadline) {
+        if (key === "kuaishou" && await kuaishouRedirectBlocked(page)) {
+          Object.assign(task, { message: "登录成功，正在进入快手创作者平台", progress: 80 });
+          await openKuaishouCreatorHome(page);
+        }
         const loggedIn = await hasPlatformLogin(page, context, key);
         if (loggedIn) {
           Object.assign(task, { message: "已检测到登录成功，正在采集账号昵称和头像", progress: 88 });
           await page.waitForTimeout(900);
+          if (key === "kuaishou") {
+            const opened = await openKuaishouCreatorHome(page);
+            if (!opened || await kuaishouRedirectBlocked(page)) {
+              await page.waitForTimeout(750);
+              continue;
+            }
+          }
           if (await hasPlatformLogin(page, context, key)) {
             const accountId = replaceAccountId || crypto.randomUUID().replaceAll("-", "").slice(0, 16);
             const stateFile = `${key}-${accountId}.json`;

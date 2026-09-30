@@ -1,6 +1,6 @@
 const IMAGE_TEXT_PLATFORMS = {
   douyin: { name: '抖音', logo: '抖', className: 'douyin', titleInput: 'imageTextTitleDouyin', titleLimit: 30 },
-  xiaohongshu: { name: '小红书', logo: '小', className: 'xhs', titleInput: 'imageTextTitleXiaohongshu', titleLimit: 20 },
+  kuaishou: { name: '快手', logo: '快', className: 'kuaishou', titleInput: 'imageTextTitleKuaishou', titleLimit: 30 },
   channels: { name: '视频号', logo: '视', className: 'channels', titleInput: 'imageTextTitleChannels', titleLimit: 100 },
 };
 const MAX_IMAGES = 18;
@@ -16,15 +16,15 @@ const IMAGE_TEXT_DRAFT_FIELDS = [
   'imageTextTopics',
   'imageTextContent',
   'imageTextTitleDouyin',
-  'imageTextTitleXiaohongshu',
+  'imageTextTitleKuaishou',
   'imageTextTitleChannels',
   'imageTextTitleChannelsShort',
   'imageTextDouyinDeclaration',
-  'imageTextXhsDeclaration',
+  'imageTextKuaishouDeclaration',
   'imageTextChannelsDeclaration',
   'imageTextCommonScheduleTime',
   'imageTextDouyinScheduleTime',
-  'imageTextXhsScheduleTime',
+  'imageTextKuaishouScheduleTime',
   'imageTextChannelsScheduleTime',
 ];
 const CHANNELS_SHORT_TITLE_ALLOWED = /^[\p{L}\p{N}\p{M} 《》“”"'‘’：:+＋?？%％℃]*$/u;
@@ -50,11 +50,9 @@ const platformTitleSummary = document.getElementById('imageTextPlatformTitleSumm
 const channelsShortTitleInput = document.getElementById('imageTextTitleChannelsShort');
 const declarationInputs = {
   douyin: document.getElementById('imageTextDouyinDeclaration'),
-  xiaohongshu: document.getElementById('imageTextXhsDeclaration'),
+  kuaishou: document.getElementById('imageTextKuaishouDeclaration'),
   channels: document.getElementById('imageTextChannelsDeclaration'),
 };
-const xhsDeclaration = document.getElementById('imageTextXhsDeclaration');
-const xhsOriginal = document.getElementById('imageTextXhsOriginal');
 const channelsHideLocation = document.getElementById('imageTextChannelsHideLocation');
 const channelsOriginal = document.getElementById('imageTextChannelsOriginal');
 const scheduleEnabled = document.getElementById('imageTextScheduleEnabled');
@@ -69,7 +67,7 @@ const commonScheduleControl = {
 };
 const platformScheduleTimes = {
   douyin: document.getElementById('imageTextDouyinScheduleTime'),
-  xiaohongshu: document.getElementById('imageTextXhsScheduleTime'),
+  kuaishou: document.getElementById('imageTextKuaishouScheduleTime'),
   channels: document.getElementById('imageTextChannelsScheduleTime'),
 };
 const platformScheduleControls = {
@@ -79,11 +77,11 @@ const platformScheduleControls = {
     hour: document.getElementById('imageTextDouyinScheduleHour'),
     minute: document.getElementById('imageTextDouyinScheduleMinute'),
   },
-  xiaohongshu: {
-    input: platformScheduleTimes.xiaohongshu,
-    date: document.getElementById('imageTextXhsScheduleDate'),
-    hour: document.getElementById('imageTextXhsScheduleHour'),
-    minute: document.getElementById('imageTextXhsScheduleMinute'),
+  kuaishou: {
+    input: platformScheduleTimes.kuaishou,
+    date: document.getElementById('imageTextKuaishouScheduleDate'),
+    hour: document.getElementById('imageTextKuaishouScheduleHour'),
+    minute: document.getElementById('imageTextKuaishouScheduleMinute'),
   },
   channels: {
     input: platformScheduleTimes.channels,
@@ -94,7 +92,6 @@ const platformScheduleControls = {
 };
 const completionModal = document.getElementById('imageTextCompletionModal');
 const completionDialog = document.getElementById('imageTextCompletionDialog');
-const xhsRiskModal = document.getElementById('imageTextXhsRiskModal');
 
 let selectedImages = [];
 let previewUrls = [];
@@ -102,7 +99,6 @@ let activeTaskId = localStorage.getItem(ACTIVE_TASK_KEY) || '';
 let taskTimer = null;
 let scheduleLimitsTimer = null;
 let platformTitleSnapshot = {};
-let xhsRiskResolver = null;
 let draftSaveTimer = null;
 let imageDraftOperation = Promise.resolve();
 let pendingImageDraftSave = null;
@@ -144,7 +140,6 @@ function saveImageTextDraft() {
   const fields = Object.fromEntries(IMAGE_TEXT_DRAFT_FIELDS.map(id => [id, document.getElementById(id)?.value || '']));
   const draft = {
     fields,
-    xhs_original: xhsOriginal.checked,
     channels_hide_location: channelsHideLocation.checked,
     channels_original: channelsOriginal.checked,
     schedule_enabled: scheduleEnabled.checked,
@@ -167,7 +162,6 @@ function restoreImageTextDraft() {
     const field = document.getElementById(id);
     if (field && field.type !== 'file') field.value = String(value ?? '');
   });
-  xhsOriginal.checked = Boolean(draft.xhs_original);
   channelsHideLocation.checked = Boolean(draft.channels_hide_location);
   channelsOriginal.checked = Boolean(draft.channels_original);
   scheduleEnabled.checked = Boolean(draft.schedule_enabled);
@@ -346,7 +340,6 @@ function updateAccountSelectionUi() {
     input.closest('.declaration-card').classList.toggle('active', active);
   });
   [
-    [xhsOriginal, 'xiaohongshu'],
     [channelsHideLocation, 'channels'],
     [channelsOriginal, 'channels'],
   ].forEach(([input, key]) => {
@@ -375,19 +368,6 @@ function accountAvatar(account, key) {
     avatar.appendChild(image);
   }
   return avatar;
-}
-
-function confirmXhsRisk() {
-  xhsRiskModal.hidden = false;
-  document.body.classList.add('xhs-risk-open');
-  return new Promise(resolve => { xhsRiskResolver = resolve; });
-}
-
-function closeXhsRisk(accepted) {
-  xhsRiskModal.hidden = true;
-  document.body.classList.remove('xhs-risk-open');
-  xhsRiskResolver?.(accepted);
-  xhsRiskResolver = null;
 }
 
 function renderAccounts(accounts) {
@@ -421,8 +401,7 @@ function renderAccounts(accounts) {
         input.value = account.id;
         input.dataset.platform = key;
         input.disabled = !account.bound;
-        input.addEventListener('change', async () => {
-          if (key === 'xiaohongshu' && input.checked && !(await confirmXhsRisk())) input.checked = false;
+        input.addEventListener('change', () => {
           updateAccountSelectionUi();
         });
         const identity = document.createElement('span');
@@ -458,7 +437,7 @@ function updateCounts() {
   document.getElementById('imageTextContentCount').textContent = `${contentInput.value.length} / 1000`;
   [
     ['imageTextTitleDouyin', 'imageTextTitleDouyinCount', 30],
-    ['imageTextTitleXiaohongshu', 'imageTextTitleXiaohongshuCount', 20],
+    ['imageTextTitleKuaishou', 'imageTextTitleKuaishouCount', 30],
     ['imageTextTitleChannels', 'imageTextTitleChannelsCount', 100],
     ['imageTextTitleChannelsShort', 'imageTextTitleChannelsShortCount', 16],
   ].forEach(([inputId, countId, limit]) => {
@@ -505,10 +484,8 @@ function updateScheduleControlValue(control) {
 function scheduleLimits(key, now = Date.now()) {
   const minimumLead = key === 'douyin' || key === 'common'
     ? 2 * 60 * 60 * 1000
-    : key === 'xiaohongshu'
-      ? 60 * 60 * 1000
-      : 5 * 60 * 1000;
-  const maximumDays = key === 'douyin' || key === 'common' ? 14 : 15;
+    : 5 * 60 * 1000;
+  const maximumDays = key === 'douyin' || key === 'kuaishou' || key === 'common' ? 14 : 15;
   const step = key === 'common' ? 5 * 60 * 1000 : 60 * 1000;
   const minimumTimestamp = Math.ceil((now + minimumLead) / step) * step;
   const maximumTimestamp = Math.floor((now + maximumDays * 24 * 60 * 60 * 1000) / step) * step;
@@ -791,8 +768,6 @@ function openSchedulePicker(input) {
     field.addEventListener('change', () => refreshScheduleControlOptions(key, control));
   });
 });
-document.getElementById('imageTextXhsRiskCancel').addEventListener('click', () => closeXhsRisk(false));
-document.getElementById('imageTextXhsRiskContinue').addEventListener('click', () => closeXhsRisk(true));
 document.getElementById('completionClose').addEventListener('click', () => { completionModal.hidden = true; });
 
 document.getElementById('clearImageTextButton').addEventListener('click', async () => {
@@ -837,7 +812,6 @@ form.addEventListener('submit', async event => {
     data.set('targets', JSON.stringify(targets));
     data.set('schedule_timezone', Intl.DateTimeFormat().resolvedOptions().timeZone);
     data.set('short_title_channels', normalizeChannelsShortTitle(channelsShortTitleInput.value));
-    data.set('original', xhsOriginal.checked ? 'true' : 'false');
     data.set('channels_hide_location', channelsHideLocation.checked ? 'true' : 'false');
     data.set('channels_original', channelsOriginal.checked ? 'true' : 'false');
     data.set('schedule_enabled', scheduleEnabled.checked ? 'true' : 'false');
@@ -866,8 +840,8 @@ fillTimeSelect(commonScheduleControl.hour, '时', scheduleHours);
 fillTimeSelect(commonScheduleControl.minute, '分', everyFiveMinutes);
 fillTimeSelect(platformScheduleControls.douyin.hour, '时', scheduleHours);
 fillTimeSelect(platformScheduleControls.douyin.minute, '分', everyMinute);
-fillTimeSelect(platformScheduleControls.xiaohongshu.hour, '时', scheduleHours);
-fillTimeSelect(platformScheduleControls.xiaohongshu.minute, '分', everyMinute);
+fillTimeSelect(platformScheduleControls.kuaishou.hour, '时', scheduleHours);
+fillTimeSelect(platformScheduleControls.kuaishou.minute, '分', everyMinute);
 fillTimeSelect(platformScheduleControls.channels.hour, '时', scheduleHours);
 fillTimeSelect(platformScheduleControls.channels.minute, '分', everyMinute);
 syncScheduleControl(commonScheduleControl);

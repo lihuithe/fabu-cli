@@ -196,7 +196,10 @@ export class TaskService {
         task.status = 'running';
         item.status = status === 'ready' || status === 'failed' || status === 'cancelled' ? 'finalizing' : status;
         item.message = message;
-        if (status === 'submitting') item.submission_started = true;
+        if (status === 'submitting') {
+          item.submission_started = true;
+          item.submission_started_at = _job.submissionContext?.submittedAt || now();
+        }
         item.window_available = Boolean(runner.hasOpenWindows?.());
       }, { type: 'stage', stage: status, message })
     );
@@ -276,7 +279,7 @@ export class TaskService {
     current.status = 'queued';
     for (const { index } of candidates) {
       const item = current.items[index];
-      Object.assign(item, { status: 'queued', outcome: null, error_code: '', message: '等待重新执行', retryable: false, submission_started: false, evidence: null, window_available: false, attempt: item.attempt + 1 });
+      Object.assign(item, { status: 'queued', outcome: null, error_code: '', message: '等待重新执行', retryable: false, submission_started: false, submission_started_at: null, evidence: null, window_available: false, attempt: item.attempt + 1 });
       this.queue.push({ id, index, attempt: item.attempt, job: { ...plan.jobs[index], ...validated.get(index) } });
     }
     this.save(current, { type: 'retry', accounts: candidates.map(c => c.item.account_id) });
@@ -302,7 +305,14 @@ export class TaskService {
     for (const { index } of selected) {
       const entry = this.live.get(`${id}:${index}`);
       if (!entry || entry.running || !entry.runner.verifySubmission) throw new AppError('SUBMISSION_UNKNOWN', '原任务窗口不可用，请到平台核实并使用 reconcile 记录结果', { status: 409 });
-      const result = await entry.runner.verifySubmission(entry.job);
+      let result;
+      try {
+        result = await entry.runner.verifySubmission(entry.job);
+      } catch (error) {
+        this.save(this.get(id), { type: 'submission_verification_failed', platform: entry.job.platformKey,
+          account_id: entry.job.accountId, code: error.code || 'SUBMISSION_UNKNOWN', message: error.message });
+        throw error;
+      }
       const current = this.get(id);
       const item = current.items[index];
       if (item.outcome !== 'submission_unknown') continue;

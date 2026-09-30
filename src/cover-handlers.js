@@ -108,79 +108,6 @@ async function confirmDefaultDouyin(page, job, platform, log) {
   } catch (error) { throw new CoverUploadError(`抖音${stage}失败：${error.message}`); }
 }
 
-async function uploadXiaohongshu(page, job, platform, log) {
-  const ratio = job.coverRatio === "4:3" ? "4:3" : "3:4";
-  const cover = job.covers[ratio];
-  if (!cover || !fs.existsSync(cover)) throw new CoverUploadError(`小红书${job.videoWidth > job.videoHeight ? "横屏" : "竖屏"}视频缺少 ${ratio} 封面文件`);
-  let stage = "等待视频上传完成";
-  try {
-    const entry = await findXiaohongshuCoverEntry(page);
-    stage = "打开设置封面弹窗";
-    await safeClick(entry, "打开小红书设置封面弹窗");
-    const modal = page.locator(".d-modal.cover-modal").first();
-    await modal.waitFor({ state: "visible", timeout: 10_000 });
-    const input = page.locator('xpath=//div[@class="canvas-container"]//div[@class="cover-container"]/input').first();
-    const button = page.locator('xpath=//div[@class="canvas-container"]//div[@class="cover-container"]/input/following-sibling::div[contains(@class,"cover-choose-container")]//div[contains(@class,"upload-btn")]').first();
-    const canvas = page.locator('xpath=//div[@class="canvas-container"]//div[@class="cover-container"]//div[@id="workspace"]').first();
-    await input.waitFor({ state: "attached", timeout: 10_000 });
-    await button.waitFor({ state: "visible", timeout: 10_000 });
-    const before = await mediaSignature(canvas);
-    stage = `上传 ${ratio} 封面`;
-    const chooserPromise = page.waitForEvent("filechooser", { timeout: 10_000 });
-    await safeClick(button, "点击小红书上传图片按钮");
-    await (await chooserPromise).setFiles(cover);
-    await waitForMediaChange(page, canvas, before, 60_000);
-    stage = "确认封面";
-    const confirm = page.locator('xpath=//div[@class="d-button-content" and normalize-space(.)="确定"]').first();
-    await confirm.waitFor({ state: "visible", timeout: 10_000 });
-    await safeClick(confirm, "确认小红书封面");
-    await modal.waitFor({ state: "hidden", timeout: 10_000 });
-    log(`[${platform.name}/${job.account}] ${job.videoWidth > job.videoHeight ? "横屏" : "竖屏"}视频已上传并确认 ${ratio} 原始封面，等待人工发布`);
-  } catch (error) { throw new CoverUploadError(`小红书${stage}失败：${error.message}`); }
-}
-
-async function confirmDefaultXiaohongshu(page, job, platform, log) {
-  let stage = "等待视频上传完成";
-  try {
-    const entry = await findXiaohongshuCoverEntry(page);
-    stage = "打开平台默认封面弹窗";
-    await safeClick(entry, "打开小红书默认封面弹窗");
-    const modal = page.locator(".d-modal.cover-modal").first();
-    await modal.waitFor({ state: "visible", timeout: 10_000 });
-    stage = "确认平台默认封面";
-    const confirm = page.locator('xpath=//div[@class="d-button-content" and normalize-space(.)="确定"]').first();
-    await confirm.waitFor({ state: "visible", timeout: 10_000 });
-    await safeClick(confirm, "确认小红书平台默认封面");
-    await modal.waitFor({ state: "hidden", timeout: 10_000 });
-    log(`[${platform.name}/${job.account}] 已确认平台生成的默认封面，未上传自定义文件`);
-  } catch (error) { throw new CoverUploadError(`小红书${stage}失败：${error.message}`); }
-}
-
-export async function findXiaohongshuCoverEntry(page, timeoutMs = 300_000) {
-  const selectors = [
-    ".publish-page-content-cover-content .operator.pointer",
-    ".publish-page-content-cover .operator.pointer",
-    'div.cover .operator.pointer:has-text("修改封面")',
-    'div.cover .operator.pointer:has-text("设置封面")',
-    ".publish-page-content-cover-content div.cover > div.default",
-    'xpath=//div[contains(concat(" ", normalize-space(@class), " "), " publish-page-content-cover ")]//*[contains(concat(" ", normalize-space(@class), " "), " operator ") and contains(concat(" ", normalize-space(@class), " "), " pointer ")]',
-    'xpath=//div[contains(concat(" ", normalize-space(@class), " "), " default ") and (contains(concat(" ", normalize-space(@class), " "), " column ") or contains(concat(" ", normalize-space(@class), " "), " row "))]'
-  ];
-  return waitLoop(page, timeoutMs, async () => {
-    for (const selector of selectors) {
-      const candidates = page.locator(selector);
-      for (let index = 0; index < Math.min(await candidates.count(), 8); index += 1) {
-        const candidate = candidates.nth(index);
-        if (!(await candidate.isVisible({ timeout: 120 }).catch(() => false))) continue;
-        const text = (await candidate.innerText({ timeout: 120 }).catch(() => "")).trim();
-        if (/封面上传中|处理中/.test(text)) continue;
-        return candidate;
-      }
-    }
-    return null;
-  }, "等待小红书视频上传完成及封面入口出现超时", 350);
-}
-
 async function uploadBilibili(page, job, platform, log) {
   const covers = [job.covers["4:3"], job.covers["16:9"]];
   if (covers.some(cover => !cover || !fs.existsSync(cover))) throw new CoverUploadError("B站缺少 4:3 或 16:9 封面文件");
@@ -419,23 +346,324 @@ async function confirmDefaultChannels(page, job, platform, log) {
   } catch (error) { throw new CoverUploadError(`视频号${stage}失败：${error.message}`); }
 }
 
+async function clickKuaishouCoverApplyCancelInFrame(frame) {
+  const clicked = await frame.evaluate(() => {
+    const groups = document.querySelectorAll("#microSupport .ant-modal-confirm-btns, .ant-modal-confirm-btns");
+    for (let index = groups.length - 1; index >= 0; index -= 1) {
+      const btnGroup = groups[index];
+      const root = btnGroup.closest(".ant-modal-wrap")
+        || btnGroup.closest(".ant-modal-confirm")
+        || btnGroup.closest(".ant-modal-root");
+      if (!root) continue;
+      if (!/默认封面|将此封面应用/.test((root.textContent || "").replace(/\s+/g, ""))) continue;
+      const cancelButton = btnGroup.querySelector("button.ant-btn-text")
+        || Array.from(btnGroup.querySelectorAll("button")).find(button => (button.textContent || "").replace(/\s+/g, "") === "取消");
+      if (!cancelButton) continue;
+      cancelButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+      cancelButton.click();
+      return true;
+    }
+    return false;
+  }).catch(() => false);
+  if (clicked) {
+    await frame.waitForTimeout(120);
+    return true;
+  }
+
+  const cancel = frame.locator(
+    "#microSupport .ant-modal-confirm-btns button.ant-btn-text, .ant-modal-confirm-btns button.ant-btn-text"
+  ).filter({ hasText: /取\s*消/ }).last();
+  if (!(await cancel.count())) return false;
+  await cancel.click({ force: true, timeout: 3_000 });
+  await frame.waitForTimeout(120);
+  return true;
+}
+
+async function dismissKuaishouCoverApplyPromptInFrame(frame) {
+  if (!(await isKuaishouCoverApplyPromptVisibleInFrame(frame))) return false;
+  return clickKuaishouCoverApplyCancelInFrame(frame);
+}
+
+async function isKuaishouCoverApplyPromptVisibleInFrame(frame) {
+  return frame.evaluate(() => {
+    const roots = document.querySelectorAll("#microSupport .ant-modal-wrap, #microSupport .ant-modal-confirm, .ant-modal-wrap, .ant-modal-confirm");
+    for (let index = roots.length - 1; index >= 0; index -= 1) {
+      const root = roots[index];
+      const style = window.getComputedStyle(root);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+      if (!/默认封面|将此封面应用/.test((root.textContent || "").replace(/\s+/g, ""))) continue;
+      if (root.querySelector(".ant-modal-confirm-btns button.ant-btn-text, .ant-modal-confirm-btns button")) return true;
+    }
+    return false;
+  }).catch(() => false);
+}
+
+async function isKuaishouCoverApplyPromptVisible(page) {
+  for (const frame of page.frames()) {
+    if (await isKuaishouCoverApplyPromptVisibleInFrame(frame)) return true;
+  }
+  return false;
+}
+
+export async function isKuaishouScheduleRadioReady(page) {
+  const label = page.locator('[class*="publish-time-container"] label.ant-radio-wrapper:has(input.ant-radio-input[value="2"])').first();
+  if (!(await label.count())) return false;
+  if (!(await label.isVisible({ timeout: 150 }).catch(() => false))) return false;
+  const radio = label.locator('input.ant-radio-input[value="2"]').first();
+  return !(await radio.isDisabled().catch(() => true));
+}
+
+export async function waitForKuaishouPublishReady(page, log = () => {}, timeoutMs = 300_000) {
+  const deadline = Date.now() + timeoutMs;
+  let waitingLogged = false;
+  while (Date.now() < deadline) {
+    const error = await visibleUploadError(page);
+    if (error) throw new CoverUploadError(error);
+    await dismissKuaishouCoverApplyPrompt(page, log).catch(() => false);
+
+    const processing = await page.evaluate(() => /上传中|处理中|转码中|正在上传|视频解析/.test(document.body?.innerText || "")).catch(() => false);
+    if (processing) {
+      if (!waitingLogged) {
+        log("正在等待快手视频上传/处理完成");
+        waitingLogged = true;
+      }
+      await page.waitForTimeout(200);
+      continue;
+    }
+
+    if (await isKuaishouScheduleRadioReady(page)) {
+      log("快手视频已处理完成，发布设置（含定时发布）已可操作");
+      return true;
+    }
+
+    const publishSettingsVisible = await page.locator('text="发布设置"').first().isVisible({ timeout: 100 }).catch(() => false);
+    const publishTimeVisible = await page.locator('text="发布时间"').first().isVisible({ timeout: 100 }).catch(() => false);
+    if (publishSettingsVisible && publishTimeVisible) {
+      if (!waitingLogged) {
+        log("发布设置已显示，正在等待定时发布选项变为可点击");
+        waitingLogged = true;
+      }
+      await page.waitForTimeout(200);
+      continue;
+    }
+
+    if (!waitingLogged) {
+      log("正在等待快手发布页加载完成");
+      waitingLogged = true;
+    }
+    await page.waitForTimeout(200);
+  }
+  throw new CoverUploadError("等待快手视频处理完成及发布设置就绪超时");
+}
+
+const KUAISHOU_COVER_ENTRY_SELECTORS = [
+  '[class*="_high-cover-editor-main"] [class*="_default-cover"] [class*="_cover-full-editor"]',
+  '[class*="_default-cover"] [class*="_cover-full-editor"]',
+  '[class*="_high-cover-editor-main"] [class*="_default-cover"]',
+  '[class*="_high-cover-editor"] [class*="_default-cover"]',
+  '[class*="_high-cover-editor"]',
+  'button:has-text("上传封面")',
+  'div:has-text("上传封面")',
+  '[class*="preview"]:has-text("上传封面")',
+  'button:has-text("设置封面")',
+  'button:has-text("更换封面")',
+  'text="设置封面"',
+  'text="更换封面"',
+  'text="上传封面"',
+  '[class*="cover"]:has-text("设置封面")',
+  '[class*="cover"]:has-text("更换封面")',
+  '[class*="cover"]:has-text("上传封面")'
+];
+
+export async function findKuaishouCoverEntry(page, timeoutMs = 180_000) {
+  return waitLoop(page, timeoutMs, async () => {
+    for (const selector of KUAISHOU_COVER_ENTRY_SELECTORS) {
+      const candidates = page.locator(selector);
+      for (let index = 0; index < Math.min(await candidates.count(), 8); index += 1) {
+        const candidate = candidates.nth(index);
+        if (!(await candidate.isVisible({ timeout: 120 }).catch(() => false))) continue;
+        return candidate;
+      }
+    }
+    return null;
+  }, "等待快手封面入口就绪超时", 350);
+}
+
+function kuaishouCoverModal(page) {
+  return page.locator(".ant-modal-content").filter({ has: page.locator('[class*="_header-title"]') }).last();
+}
+
+export async function waitForKuaishouCoverModal(page, timeoutMs = 15_000) {
+  const modal = kuaishouCoverModal(page);
+  await modal.waitFor({ state: "visible", timeout: timeoutMs });
+  return modal;
+}
+
+export async function switchKuaishouCoverToUploadTab(modal) {
+  const uploadTab = modal.locator('[class*="_header-title-item"]').filter({ hasText: /^上传封面$/ }).first();
+  await uploadTab.waitFor({ state: "visible", timeout: 10_000 });
+  const active = await uploadTab.evaluate(element => /_header-title-item-active/.test(element.className)).catch(() => false);
+  if (!active) {
+    await safeClick(uploadTab, "切换快手上传封面标签");
+    await modal.page().waitForTimeout(300);
+  }
+  await modal.locator('[class*="_cropper-upload"]').first().waitFor({ state: "visible", timeout: 10_000 });
+}
+
+async function findKuaishouCoverUploadInput(modal) {
+  const scoped = modal.locator('[class*="_cropper-upload"] input[type="file"]').first();
+  if (await scoped.count()) {
+    await scoped.waitFor({ state: "attached", timeout: 10_000 });
+    return scoped;
+  }
+  const uploadButton = modal.locator('button[class*="_upload-btn"]').filter({ hasText: /^上传图片$/ }).first();
+  await uploadButton.waitFor({ state: "visible", timeout: 10_000 });
+  await safeClick(uploadButton, "打开快手封面文件选择");
+  const fallback = modal.locator('input[type="file"][accept*="image"], input[type="file"]').first();
+  await fallback.waitFor({ state: "attached", timeout: 10_000 });
+  return fallback;
+}
+
+async function waitForKuaishouCoverPreviewReady(modal, page, timeoutMs = 60_000) {
+  const preview = modal.locator('[class*="_cutter-raw"], [class*="_cropper-main"] canvas, [class*="_cropper-upload"] img').first();
+  const confirm = modal.locator('button[class*="_footer-btn"]').filter({ hasText: /^确认$/ }).first();
+  const deadline = Date.now() + timeoutMs;
+  let before = "";
+  if (await preview.count()) before = await mediaSignature(preview).catch(() => "");
+  while (Date.now() < deadline) {
+    if (before && await preview.count()) {
+      const after = await mediaSignature(preview).catch(() => "");
+      if (after && after !== before) return;
+    }
+    if (await confirm.isEnabled().catch(() => false)) return;
+    await page.waitForTimeout(250);
+  }
+  if (!(await confirm.isEnabled().catch(() => false))) throw new Error("封面预览未就绪或确认按钮不可点击");
+}
+
+async function confirmKuaishouCoverModal(modal, page) {
+  const confirm = modal.locator('button[class*="_footer-btn"]').filter({ hasText: /^确认$/ }).first();
+  await confirm.waitFor({ state: "visible", timeout: 10_000 });
+  await waitForKuaishouCoverPreviewReady(modal, page, 30_000);
+  if (!(await confirm.isEnabled().catch(() => false))) throw new Error("封面确认按钮当前不可点击");
+  await safeClick(confirm, "确认快手封面");
+  await modal.waitFor({ state: "hidden", timeout: 20_000 }).catch(() => {});
+}
+
+export async function dismissKuaishouCoverApplyPrompt(page, log = () => {}) {
+  for (const frame of page.frames()) {
+    if (!(await dismissKuaishouCoverApplyPromptInFrame(frame))) continue;
+    log("已取消快手默认封面应用提示，继续设置定时发布");
+    return true;
+  }
+  return false;
+}
+
+export async function ensureKuaishouCoverApplyPromptDismissed(page, log = () => {}, timeoutMs = 3_000, options = {}) {
+  const appearanceGraceMs = options.appearanceGraceMs ?? Math.min(400, timeoutMs);
+  const deadline = Date.now() + timeoutMs;
+  const start = Date.now();
+  let seenPrompt = false;
+  while (Date.now() < deadline) {
+    const visible = await isKuaishouCoverApplyPromptVisible(page);
+    if (visible) {
+      seenPrompt = true;
+      log("检测到快手默认封面确认弹窗，正在点击取消");
+      if (await dismissKuaishouCoverApplyPrompt(page, log)) {
+        await page.waitForTimeout(80);
+        if (!(await isKuaishouCoverApplyPromptVisible(page))) return true;
+      }
+    } else if (seenPrompt) {
+      return true;
+    } else if (Date.now() - start >= appearanceGraceMs) {
+      return true;
+    }
+    await page.waitForTimeout(80);
+  }
+  if (await isKuaishouCoverApplyPromptVisible(page)) {
+    log("快手默认封面确认弹窗仍未关闭");
+    return false;
+  }
+  return true;
+}
+
+export async function waitAndDismissKuaishouCoverApplyPrompt(page, timeoutMs = 5_000, log = () => {}) {
+  const deadline = Date.now() + timeoutMs;
+  const start = Date.now();
+  const appearanceWaitMs = Math.min(1_000, timeoutMs);
+  let seenPrompt = false;
+  while (Date.now() < deadline) {
+    const visible = await isKuaishouCoverApplyPromptVisible(page);
+    if (visible) {
+      seenPrompt = true;
+      log("检测到快手默认封面确认弹窗，正在点击取消");
+      if (await dismissKuaishouCoverApplyPrompt(page, log)) {
+        await page.waitForTimeout(80);
+        if (!(await isKuaishouCoverApplyPromptVisible(page))) return true;
+      }
+    } else if (seenPrompt) {
+      return true;
+    } else if (Date.now() - start >= appearanceWaitMs) {
+      return true;
+    }
+    await page.waitForTimeout(80);
+  }
+  if (await isKuaishouCoverApplyPromptVisible(page)) {
+    log("快手默认封面确认弹窗仍未关闭");
+    return false;
+  }
+  return true;
+}
+
+async function uploadKuaishou(page, job, platform, log) {
+  const cover = job.covers["3:4"];
+  if (!cover || !fs.existsSync(cover)) throw new CoverUploadError("快手缺少 3:4 封面文件");
+  let stage = "打开封面入口";
+  try {
+    const entry = await findKuaishouCoverEntry(page);
+    stage = "打开设置封面弹窗";
+    await safeClick(entry, "打开快手设置封面弹窗");
+    const modal = await waitForKuaishouCoverModal(page);
+    stage = "切换上传封面标签";
+    await switchKuaishouCoverToUploadTab(modal);
+    const input = await findKuaishouCoverUploadInput(modal);
+    stage = "上传 3:4 封面";
+    await input.setInputFiles(cover);
+    log(`[${platform.name}/${job.account}] 已选择封面文件：${cover}`);
+    await waitForKuaishouCoverPreviewReady(modal, page, 60_000);
+    stage = "确认封面";
+    await confirmKuaishouCoverModal(modal, page);
+    stage = "关闭默认封面应用提示";
+    await waitAndDismissKuaishouCoverApplyPrompt(page, 5_000, message => log(`[${platform.name}/${job.account}] ${message}`));
+    log(`[${platform.name}/${job.account}] 已上传并确认 3:4 封面`);
+  } catch (error) { throw new CoverUploadError(`快手${stage}失败：${error.message}`); }
+}
+
 export async function uploadCovers(page, job, platform, log) {
   if (platform.key === "douyin") return uploadDouyin(page, job, platform, log);
-  if (platform.key === "xiaohongshu") return uploadXiaohongshu(page, job, platform, log);
+  if (platform.key === "kuaishou") return uploadKuaishou(page, job, platform, log);
   if (platform.key === "channels") return uploadChannels(page, job, platform, log);
   if (platform.key === "bilibili") return uploadBilibili(page, job, platform, log);
 }
 
 export async function confirmDefaultCover(page, job, platform, log) {
   if (platform.key === "douyin") return confirmDefaultDouyin(page, job, platform, log);
-  if (platform.key === "xiaohongshu") return confirmDefaultXiaohongshu(page, job, platform, log);
   if (platform.key === "channels") return confirmDefaultChannels(page, job, platform, log);
   if (platform.key === "bilibili") return confirmDefaultBilibili(page, job, platform, log);
 }
 
 const COVER_SIGNATURE_SELECTORS = {
-  douyin: ["div.coverControl-CjlzqC"], xiaohongshu: ["div.operator.noCover.pointer", "div.publish-page-content-cover-content"],
-  channels: ["div.cover-preview-wrap div.vertical-img-wrap", "text=设置封面", "text=更换封面", "text=上传封面"], bilibili: ["div.cover-main", "div.cover-empty", "div.cover-slot"]
+  douyin: ["div.coverControl-CjlzqC"],
+  kuaishou: [
+    '[class*="_high-cover-editor-main"] [class*="_default-cover"] img',
+    '[class*="_default-cover"] img',
+    '[class*="cover"] img',
+    "text=设置封面",
+    "text=更换封面",
+    "text=上传封面"
+  ],
+  channels: ["div.cover-preview-wrap div.vertical-img-wrap", "text=设置封面", "text=更换封面", "text=上传封面"],
+  bilibili: ["div.cover-main", "div.cover-empty", "div.cover-slot"]
 };
 
 export async function platformCoverSignature(page, key) {

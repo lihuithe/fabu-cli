@@ -1,4 +1,4 @@
-import { DECLARATION_OPTIONS, DECLARATION_TRIGGERS, FINAL_ACTION, splitTopics } from "./platforms.js";
+import { DECLARATION_OPTIONS, DECLARATION_TRIGGERS, FINAL_ACTION, isKuaishouDeclarationSkipped, splitTopics } from "./platforms.js";
 
 export class CoverUploadError extends Error {}
 
@@ -34,10 +34,68 @@ export async function safeClick(locator, purpose, options = {}) {
   await locator.click(clickOptions);
 }
 
-export async function fillFirst(page, selectors, value) {
+const KUAISHOU_GUIDE_SKIP_SELECTORS = [
+  '#react-joyride-step-0 [data-action="skip"]',
+  '[id^="react-joyride-step-"] [data-action="skip"]',
+  '[id^="react-joyride-step-"] [aria-label="Skip"]',
+  '[id^="react-joyride-step-"] [title="Skip"]',
+  '.__floater.__floater__open [data-action="skip"]',
+  '[role="alertdialog"] [data-action="skip"]',
+  '[role="alertdialog"] [aria-label="Skip"]',
+  '[role="alertdialog"] [title="Skip"]'
+];
+
+export async function dismissKuaishouPublishGuide(page, timeoutMs = 250) {
+  const skip = page.locator(KUAISHOU_GUIDE_SKIP_SELECTORS.join(", ")).first();
+  try {
+    await skip.waitFor({ state: "attached", timeout: Math.max(80, timeoutMs) });
+  } catch {
+    return false;
+  }
+
+  const clicked = await page.evaluate(selectors => {
+    const node = selectors.map(selector => document.querySelector(selector)).find(Boolean);
+    if (!node) return false;
+    node.scrollIntoView({ block: "center", inline: "center" });
+    for (const type of ["pointerdown", "mousedown", "mouseup", "click"]) {
+      node.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, buttons: 1 }));
+    }
+    node.click();
+    return true;
+  }, KUAISHOU_GUIDE_SKIP_SELECTORS).catch(() => false);
+
+  if (!clicked) {
+    const box = await skip.boundingBox().catch(() => null);
+    if (box) await page.mouse.click(box.x + Math.max(4, box.width / 2), box.y + Math.max(4, box.height / 2)).catch(() => {});
+    else await page.keyboard.press("Escape").catch(() => {});
+  }
+
+  await skip.waitFor({ state: "detached", timeout: 3_000 }).catch(() => {});
+  if (await skip.count()) {
+    const box = await skip.boundingBox().catch(() => null);
+    if (box) await page.mouse.click(box.x + Math.max(4, box.width / 2), box.y + Math.max(4, box.height / 2)).catch(() => {});
+    await page.evaluate(() => {
+      document.querySelectorAll('[id^="react-joyride-step-"], .react-joyride__overlay, .__floater').forEach(node => node.remove());
+    }).catch(() => {});
+    await skip.waitFor({ state: "detached", timeout: 1_000 }).catch(() => {});
+  }
+  return !(await skip.count());
+}
+
+export async function fillFirst(page, selectors, value, typeOnly = false) {
   if (!value) return true;
   const item = await visibleFirst(page, selectors);
   if (!item) return false;
+  if (typeOnly) {
+    await focusEditorEnd(page, item);
+    await page.keyboard.press("Control+A");
+    await page.keyboard.press("Backspace");
+    for (const [index, line] of String(value).split("\n").entries()) {
+      if (index) await page.keyboard.press("Enter");
+      if (line) await page.keyboard.type(line, { delay: 12 });
+    }
+    return true;
+  }
   try {
     await item.fill(value);
   } catch {
@@ -66,10 +124,17 @@ export async function findVideoInput(page, platform, timeoutMs = 10_000) {
   return null;
 }
 
+const KUAISHOU_MAX_TOPICS = 4;
+const KUAISHOU_TAG_TYPE_DELAY = 100;
+const KUAISHOU_TAG_CONFIRM_WAIT = 500;
+
 const TOPIC_OPTION_SELECTORS = [
   '[role="option"]',
+  '[role="listbox"] [role="option"]',
   '[class*="suggest"] [class*="item"]',
   '[class*="topic"] [class*="item"]',
+  '[class*="popover"] [class*="item"]',
+  '[class*="dropdown"] [class*="item"]',
   ".semi-select-option",
   ".ant-select-item-option"
 ];
@@ -119,6 +184,48 @@ async function focusEditorEnd(page, editor) {
     await safeClick(editor, "定位话题输入位置");
     await page.keyboard.press("Control+End");
     return true;
+  }
+}
+
+async function typeKuaishouHash(page) {
+  try {
+    await page.keyboard.down("Shift");
+    await page.keyboard.type("#", { delay: KUAISHOU_TAG_TYPE_DELAY });
+  } finally {
+    await page.keyboard.up("Shift").catch(() => {});
+  }
+}
+
+async function appendKuaishouTopics(page, editor, topics) {
+  const tags = topics
+    .slice(0, KUAISHOU_MAX_TOPICS)
+    .map(raw => raw.replace(/^#+/, "").trim())
+    .filter(Boolean);
+  if (!tags.length) return true;
+
+  await safeClick(editor, "填写快手话题");
+  await focusEditorEnd(page, editor);
+  const needsTopicLineBreak = await editor.evaluate(element => {
+    const text = (element.innerText || "").replace(/\u00a0/g, " ");
+    if (!text.trim()) return false;
+    return !/[\n\r]$/.test(text);
+  });
+  if (needsTopicLineBreak) {
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(150);
+  }
+
+  try {
+    for (const tag of tags) {
+      await focusEditorEnd(page, editor);
+      await typeKuaishouHash(page);
+      await page.keyboard.type(tag, { delay: KUAISHOU_TAG_TYPE_DELAY });
+      await page.waitForTimeout(KUAISHOU_TAG_CONFIRM_WAIT);
+      await page.keyboard.press("Enter");
+    }
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -314,6 +421,7 @@ export async function appendTopics(page, platform, rawTopics, onSkipped = () => 
   if (platform.key === "bilibili") return appendBilibiliTopics(page, topics, onSkipped);
   const editor = await visibleFirst(page, platform.contents);
   if (!editor) return false;
+  if (platform.key === "kuaishou") return appendKuaishouTopics(page, editor, topics);
   if (platform.key === "douyin") {
     await waitDouyinEditorStable(page, editor);
     if (!(await focusDouyinEditorEnd(page, editor))) return false;
@@ -325,28 +433,6 @@ export async function appendTopics(page, platform, rawTopics, onSkipped = () => 
       await page.keyboard.type(topic, { delay: 25 });
       await page.keyboard.press("Enter");
       await page.waitForTimeout(180);
-    }
-    return true;
-  }
-  if (platform.key === "xiaohongshu") {
-    await focusEditorEnd(page, editor);
-    await page.keyboard.press("Enter");
-    for (const raw of topics.slice(0, 10)) {
-      const topic = raw.replace(/^#+/, "").trim();
-      if (!topic) continue;
-      await focusEditorEnd(page, editor);
-      const before = await editor.locator("a.tiptap-topic").count();
-      await page.keyboard.type(`#${topic}`, { delay: 35 });
-      const option = await waitTopicOption(page, topic);
-      if (option) {
-        await safeClick(option, "选择小红书话题");
-        const deadline = Date.now() + 2_000;
-        while (Date.now() < deadline && await editor.locator("a.tiptap-topic").count() <= before) await page.waitForTimeout(100);
-      } else await page.keyboard.press("Escape");
-      await page.keyboard.press("Escape");
-      await focusEditorEnd(page, editor);
-      await page.keyboard.press("Enter");
-      await page.waitForTimeout(250);
     }
     return true;
   }
@@ -411,11 +497,97 @@ async function setDouyinDeclaration(page, declaration) {
   } catch { return false; }
 }
 
+async function findKuaishouDeclarationSelect(page) {
+  const candidates = [
+    page.locator('.ant-select:has(.ant-select-selection-placeholder:has-text("为作品添加补充说明"))').first(),
+    page.locator('.ant-select:has(.ant-select-selection-item)').first(),
+    page.locator('text="作者声明"').locator('xpath=following::*[contains(@class,"ant-select")][1]').first()
+  ];
+  for (const candidate of candidates) {
+    if (!(await candidate.count())) continue;
+    if (await candidate.isVisible({ timeout: 300 }).catch(() => false)) return candidate;
+  }
+  const trigger = await visibleFirst(page, DECLARATION_TRIGGERS.kuaishou, 1_500);
+  if (!trigger) return null;
+  const scoped = trigger.locator('xpath=ancestor::*[contains(@class,"ant-select")][1]').first();
+  if (await scoped.count()) return scoped;
+  return trigger;
+}
+
+async function kuaishouDeclarationSelected(page, declaration) {
+  const select = await findKuaishouDeclarationSelect(page);
+  if (!select) return false;
+  const selected = select.locator(".ant-select-selection-item").first();
+  if (!(await selected.count())) return false;
+  const text = (await selected.innerText({ timeout: 300 }).catch(() => "")).trim();
+  return text.includes(declaration);
+}
+
+async function waitForKuaishouDeclarationDropdown(page, timeoutMs = 4_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const dropdown = page.locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden)").last();
+    if (await dropdown.isVisible({ timeout: 150 }).catch(() => false)) return dropdown;
+    await page.waitForTimeout(100);
+  }
+  return null;
+}
+
+async function openKuaishouDeclarationMenu(page) {
+  const select = await findKuaishouDeclarationSelect(page);
+  if (!select) return false;
+  const selector = select.locator(".ant-select-selector").first();
+  if (!(await selector.isVisible({ timeout: 500 }).catch(() => false))) return false;
+  await safeClick(selector, "打开快手作者声明");
+  await page.waitForTimeout(200);
+  if (await waitForKuaishouDeclarationDropdown(page, 2_000)) return true;
+  await safeClick(select.locator(".ant-select-arrow").first(), "展开快手作者声明");
+  await page.waitForTimeout(200);
+  return Boolean(await waitForKuaishouDeclarationDropdown(page, 2_000));
+}
+
+async function clickKuaishouDeclarationOption(page, declaration) {
+  const dropdown = await waitForKuaishouDeclarationDropdown(page, 3_000);
+  if (!dropdown) return false;
+
+  const labeled = dropdown.locator(`.ant-select-item-option[label="${declaration}"], [role="option"][aria-label="${declaration}"]`).first();
+  if (await labeled.count() && await labeled.isVisible({ timeout: 200 }).catch(() => false)) {
+    await safeClick(labeled, "选择快手内容声明");
+    return true;
+  }
+
+  const options = dropdown.locator(".ant-select-item-option");
+  for (let index = 0; index < Math.min(await options.count(), 8); index += 1) {
+    const option = options.nth(index);
+    const label = (await option.getAttribute("label").catch(() => "")) || "";
+    const title = (await option.getAttribute("title").catch(() => "")) || "";
+    const content = (await option.locator(".ant-select-item-option-content").innerText({ timeout: 150 }).catch(() => "")).trim();
+    if ([label, title, content].includes(declaration) && await option.isVisible({ timeout: 100 }).catch(() => false)) {
+      await safeClick(option, "选择快手内容声明");
+      return true;
+    }
+  }
+  return false;
+}
+
+async function setKuaishouDeclaration(page, declaration) {
+  if (await kuaishouDeclarationSelected(page, declaration)) return true;
+  if (!(await openKuaishouDeclarationMenu(page))) return false;
+  if (!(await clickKuaishouDeclarationOption(page, declaration))) return false;
+  const deadline = Date.now() + 4_000;
+  while (Date.now() < deadline) {
+    if (await kuaishouDeclarationSelected(page, declaration)) return true;
+    await page.waitForTimeout(120);
+  }
+  return false;
+}
+
 async function setDeclaration(page, platform, declaration) {
   if (!declaration) return true;
   if (!DECLARATION_OPTIONS[platform.key].includes(declaration)) throw new Error(`不支持的${platform.name}声明：${declaration}`);
   if (shouldSkipDeclaration(platform.key, declaration)) return true;
   if (platform.key === "douyin") return setDouyinDeclaration(page, declaration);
+  if (platform.key === "kuaishou") return setKuaishouDeclaration(page, declaration);
   if (platform.key === "bilibili") return setBilibiliDeclaration(page, declaration);
   let choice = await visibleExactText(page, declaration, 180);
   if (!choice && await openDeclaration(page, platform.key)) choice = await visibleExactText(page, declaration);
@@ -473,66 +645,7 @@ async function setBilibiliDeclaration(page, declaration) {
 }
 
 export function shouldSkipDeclaration(platformKey, declaration) {
-  return platformKey === "xiaohongshu" && declaration === "无需内容标注";
-}
-
-async function findXiaohongshuOriginalControls(page, timeout = 500) {
-  try {
-    const label = page.getByText("原创声明", { exact: true }).first();
-    if (!(await label.isVisible({ timeout }))) return null;
-    const container = label.locator('xpath=ancestor::*[.//div[contains(concat(" ", normalize-space(@class), " "), " custom-switch-switch ")]][1]');
-    const switchControl = container.locator("div.custom-switch-switch div.d-switch.d-clickable").first();
-    const box = switchControl.locator('input[type="checkbox"][value="true"]').first();
-    if (!(await box.count()) || !(await switchControl.isVisible({ timeout }))) return null;
-    return { switchControl, box };
-  } catch {
-    return null;
-  }
-}
-
-export async function setXiaohongshuOriginal(page, enabled, controls = null) {
-  try {
-    const resolved = controls || await findXiaohongshuOriginalControls(page);
-    if (!resolved) return false;
-    const { switchControl, box } = resolved;
-    if (await box.isChecked() === enabled) return true;
-
-    if (!enabled) {
-      await safeClick(switchControl, "关闭小红书原创声明");
-      const deadline = Date.now() + 1_500;
-      while (Date.now() < deadline) {
-        if (!(await box.isChecked().catch(() => true))) return true;
-        await page.waitForTimeout(80);
-      }
-      return false;
-    }
-
-    await safeClick(switchControl, "打开小红书原创声明");
-    const agreementControl = page.locator("div.d-checkbox.d-checkbox-main-label.d-clickable")
-      .filter({ hasText: "我已阅读并同意" })
-      .first();
-    await agreementControl.waitFor({ state: "visible", timeout: 2_000 });
-    const agreement = agreementControl.locator('input[type="checkbox"]').first();
-    if (!(await agreement.count())) return false;
-    if (!(await agreement.isChecked())) await safeClick(agreementControl, "勾选小红书原创声明协议");
-    const agreementDeadline = Date.now() + 2_000;
-    while (Date.now() < agreementDeadline && !(await agreement.isChecked().catch(() => false))) await page.waitForTimeout(80);
-    if (!(await agreement.isChecked().catch(() => false))) return false;
-
-    const confirm = page.getByRole("button", { name: "声明原创", exact: true }).first();
-    await confirm.waitFor({ state: "visible", timeout: 2_000 });
-    const enableDeadline = Date.now() + 2_000;
-    while (Date.now() < enableDeadline && !(await confirm.isEnabled())) await page.waitForTimeout(80);
-    if (!(await confirm.isEnabled())) return false;
-    await safeClick(confirm, "确认小红书声明原创");
-
-    const checkedDeadline = Date.now() + 3_000;
-    while (Date.now() < checkedDeadline) {
-      if (await box.isChecked().catch(() => false)) return true;
-      await page.waitForTimeout(80);
-    }
-    return false;
-  } catch { return false; }
+  return platformKey === "kuaishou" && isKuaishouDeclarationSkipped(declaration);
 }
 
 function channelsRoots(page) {
@@ -599,7 +712,7 @@ export async function setChannelsLocationHidden(page) {
 
 const LOCATION_TRIGGER_SELECTORS = Object.freeze({
   douyin: ['button:has-text("添加位置")', '[class*="location"]:has-text("添加位置")', '[class*="poi"]:has-text("添加位置")'],
-  xiaohongshu: ['button:has-text("添加地点")', '[class*="location"]:has-text("添加地点")', '[class*="poi"]:has-text("添加地点")'],
+  kuaishou: ['button:has-text("添加位置")', '[class*="location"]:has-text("添加位置")', '[class*="poi"]:has-text("添加位置")', 'text="添加位置"'],
   bilibili: ['button:has-text("添加位置")', '[class*="location"]:has-text("添加位置")', '[class*="position"]:has-text("添加位置")']
 });
 
@@ -877,102 +990,10 @@ async function setDouyinLocation(page, locationName) {
   return false;
 }
 
-async function xiaohongshuLocationDropdown(page, select) {
-  const className = await select.getAttribute("class").catch(() => "");
-  const suffix = /(?:^|\s)custom-select-([^\s]+)/.exec(className || "")?.[1];
-  if (suffix) {
-    const dropdown = page.locator(`.d-popover.d-dropdown.custom-dropdown-${suffix}`).first();
-    if (await dropdown.isVisible({ timeout: 150 }).catch(() => false)) return dropdown;
-  }
-
-  const dropdowns = page.locator(".d-popover.d-dropdown");
-  for (let index = (await dropdowns.count()) - 1; index >= 0; index -= 1) {
-    const dropdown = dropdowns.nth(index);
-    if (!(await dropdown.isVisible({ timeout: 100 }).catch(() => false))) continue;
-    if (await dropdown.locator(".d-options .option-item").count()) return dropdown;
-  }
-  return null;
-}
-
-async function visibleXiaohongshuLocationOptions(dropdown) {
-  if (!dropdown) return [];
-  const candidates = dropdown.locator(".d-options > .d-grid-item .option-item");
-  const visible = [];
-  for (let index = 0; index < Math.min(await candidates.count(), 50); index += 1) {
-    const option = candidates.nth(index);
-    if (!(await option.isVisible({ timeout: 100 }).catch(() => false))) continue;
-    visible.push({ option, text: (await option.innerText({ timeout: 200 }).catch(() => "")).trim() });
-  }
-  return visible;
-}
-
-async function selectFirstXiaohongshuLocation(page, select, dropdown, firstResult) {
-  const name = (await firstResult.option.locator(".option-name").first().innerText({ timeout: 300 }).catch(() => ""))
-    .trim() || firstResult.text.split(/\r?\n/)[0].trim();
-  await safeClick(firstResult.option, "选择小红书地点搜索第一条结果");
-
-  const selectedText = select.locator(".d-select-description").first();
-  const deadline = Date.now() + 3_000;
-  while (Date.now() < deadline) {
-    const popupVisible = await dropdown.isVisible({ timeout: 100 }).catch(() => false);
-    const current = (await selectedText.innerText({ timeout: 150 }).catch(() => "")).trim();
-    if (!popupVisible) return true;
-    if (name && current.includes(name)) {
-      await page.keyboard.press("Escape");
-      await dropdown.waitFor({ state: "hidden", timeout: 1_000 }).catch(() => {});
-      return !(await dropdown.isVisible({ timeout: 100 }).catch(() => false));
-    }
-    await page.waitForTimeout(100);
-  }
-  return false;
-}
-
-async function setXiaohongshuLocation(page, locationName) {
-  const select = page.locator(".address-card-wrapper .address-card-select").first();
-  if (!(await select.isVisible({ timeout: 1_500 }).catch(() => false))) return false;
-  await safeClick(select, "打开小红书地点选择框");
-
-  const input = select.locator('.d-select-input-filter input[type="text"]').first();
-  if (!(await input.isVisible({ timeout: 1_000 }).catch(() => false))) return false;
-  await input.fill("");
-  await input.pressSequentially(locationName, { delay: 70 });
-
-  const inputDeadline = Date.now() + 2_000;
-  while (Date.now() < inputDeadline) {
-    if ((await input.inputValue({ timeout: 150 }).catch(() => "")).trim() === locationName) break;
-    await page.waitForTimeout(100);
-  }
-  if ((await input.inputValue({ timeout: 150 }).catch(() => "")).trim() !== locationName) return false;
-
-  await page.waitForTimeout(1_200);
-  const deadline = Date.now() + 8_000;
-  let stableSignature = "";
-  let stableCount = 0;
-  while (Date.now() < deadline) {
-    const dropdown = await xiaohongshuLocationDropdown(page, select);
-    const options = await visibleXiaohongshuLocationOptions(dropdown);
-    if (options.length && douyinLocationResultsMatch([options[0]], locationName)) {
-      const signature = options.slice(0, 5).map(({ text }) => text).join("|");
-      if (signature === stableSignature) stableCount += 1;
-      else {
-        stableSignature = signature;
-        stableCount = 1;
-      }
-      if (stableCount >= 3) return selectFirstXiaohongshuLocation(page, select, dropdown, options[0]);
-    } else {
-      stableSignature = "";
-      stableCount = 0;
-    }
-    await page.waitForTimeout(150);
-  }
-  return false;
-}
-
 export async function setPublishLocation(page, platform, locationName) {
   const value = String(locationName ?? "").trim();
   if (!value) return true;
   if (platform.key === "douyin") return setDouyinLocation(page, value);
-  if (platform.key === "xiaohongshu") return setXiaohongshuLocation(page, value);
   if (platform.key === "channels") return setChannelsLocation(page, value);
 
   const roots = channelsRoots(page);
@@ -1001,9 +1022,29 @@ export async function setPublishLocation(page, platform, locationName) {
 
 const FINAL_PUBLISH_NAMES = Object.freeze({
   douyin: /^(?:发布|立即发布|确认发布)$/,
+  kuaishou: /^(?:发布|立即发布|确认发布)$/,
   channels: /^(?:发表|立即发表|发布|立即发布)$/,
   bilibili: /^(?:立即投稿|确认投稿|投稿|发布|立即发布)$/
 });
+
+const CHANNELS_ORIGINAL_PROMPT_TEXT = "你已加入创作分成计划，优质原创视频的评论区有机会展示广告，获得分成收益。";
+
+// 未勾选原创时视频号点击“发表”后会弹出“声明原创的视频有机会获得广告分成”，需点“直接发表”才会真正提交。
+async function confirmChannelsDirectPublish(page, roots, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const root of roots) {
+      const prompt = root.getByText(CHANNELS_ORIGINAL_PROMPT_TEXT, { exact: false }).first();
+      if (!(await prompt.isVisible({ timeout: 150 }).catch(() => false))) continue;
+      const button = root.locator("button.weui-desktop-btn.weui-desktop-btn_default").filter({ hasText: /^\s*直接发表\s*$/ }).first();
+      if (!(await button.isVisible({ timeout: 500 }).catch(() => false))) continue;
+      await safeClick(button, "视频号原创提示中点击直接发表", { allowFinalAction: true });
+      return true;
+    }
+    await page.waitForTimeout(150);
+  }
+  return false;
+}
 
 export async function clickFinalPublish(page, platform, { beforeClick = () => {} } = {}) {
   const name = FINAL_PUBLISH_NAMES[platform.key];
@@ -1019,7 +1060,23 @@ export async function clickFinalPublish(page, platform, { beforeClick = () => {}
         if (!(await button.isEnabled({ timeout: 150 }).catch(() => false))) continue;
         await beforeClick();
         await safeClick(button, `点击${platform.name}最终发布按钮`, { allowFinalAction: true });
+        if (platform.key === "channels") await confirmChannelsDirectPublish(page, roots);
         return true;
+      }
+      const nonButton = platform.key === "kuaishou"
+        ? root.locator('[class*="button-primary"]').filter({ hasText: /^\s*发布\s*$/ })
+        : platform.key === "bilibili" ? root.locator("span.submit-add").filter({ hasText: name }) : null;
+      if (nonButton) {
+        // 快手的发布按钮是 div、B站的“立即投稿”是 span，都没有 button 角色。
+        const divs = nonButton;
+        for (let index = 0; index < Math.min(await divs.count(), 6); index += 1) {
+          const item = divs.nth(index);
+          if (!(await item.isVisible({ timeout: 150 }).catch(() => false))) continue;
+          await item.scrollIntoViewIfNeeded().catch(() => {});
+          await beforeClick();
+          await safeClick(item, `点击${platform.name}最终发布按钮`, { allowFinalAction: true });
+          return true;
+        }
       }
     }
     await page.waitForTimeout(200);
@@ -1136,20 +1193,11 @@ async function setBilibiliOriginal(page) {
 export async function setRights(page, job, log, platform) {
   const failures = [];
   if (shouldSkipDeclaration(platform.key, job.declaration)) {
-    log(`[${platform.name}/${job.account}] 保持平台默认：无需内容标注`);
+    log(`[${platform.name}/${job.account}] 保持平台默认：${job.declaration || "无需内容标注"}`);
   } else if (await setDeclaration(page, platform, job.declaration)) {
     if (job.declaration) log(`[${platform.name}/${job.account}] 已同步声明：${job.declaration}`);
   } else failures.push(`未能设置声明“${job.declaration}”`);
-  if (platform.key === "xiaohongshu") {
-    const controls = await findXiaohongshuOriginalControls(page);
-    if (!controls) {
-      log(`[${platform.name}/${job.account}] 当前账号未提供原创声明控件，已跳过`);
-    } else if (!(await setXiaohongshuOriginal(page, job.original, controls))) {
-      failures.push("未能同步小红书原创声明开关");
-    } else {
-      log(`[${platform.name}/${job.account}] 原创声明已${job.original ? "勾选" : "取消"}`);
-    }
-  } else if (platform.key === "bilibili" && job.original) {
+  if (platform.key === "bilibili" && job.original) {
     if (!(await setBilibiliOriginal(page))) failures.push("未能勾选B站内容自制声明");
   }
   if (failures.length) throw new Error(`${platform.name}声明同步失败：${failures.join("；")}`);

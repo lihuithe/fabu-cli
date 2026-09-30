@@ -1,16 +1,12 @@
 const PLATFORM_NAMES = {
   douyin: '抖音',
-  xiaohongshu: '小红书',
+  kuaishou: '快手',
   channels: '视频号',
   bilibili: 'B站',
 };
 let pollTimer = null;
 let activeBinding = null;
 let missingProfileRefreshStarted = false;
-const xhsRiskModal = document.getElementById('xhsRiskModal');
-const xhsRiskCancel = document.getElementById('xhsRiskCancel');
-const xhsRiskContinue = document.getElementById('xhsRiskContinue');
-let xhsRiskResolve = null;
 try {
   activeBinding = JSON.parse(localStorage.getItem('activeAccountBinding') || 'null');
 } catch (_) {
@@ -20,29 +16,6 @@ try {
 function platformPanel(key) {
   return document.querySelector(`.account-platform[data-key="${key}"]`);
 }
-
-function closeXhsRisk(confirmed) {
-  xhsRiskModal.hidden = true;
-  document.body.classList.remove('xhs-risk-open');
-  const resolve = xhsRiskResolve;
-  xhsRiskResolve = null;
-  if (resolve) resolve(confirmed);
-}
-
-function confirmXhsRisk() {
-  if (xhsRiskResolve) return Promise.resolve(false);
-  xhsRiskModal.hidden = false;
-  document.body.classList.add('xhs-risk-open');
-  xhsRiskCancel.focus();
-  return new Promise((resolve) => { xhsRiskResolve = resolve; });
-}
-
-xhsRiskCancel.addEventListener('click', () => closeXhsRisk(false));
-xhsRiskContinue.addEventListener('click', () => closeXhsRisk(true));
-xhsRiskModal.addEventListener('click', (event) => { if (event.target === xhsRiskModal) closeXhsRisk(false); });
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !xhsRiskModal.hidden) closeXhsRisk(false);
-});
 
 function accountDisplayName(account, key) {
   const nickname = account.nickname || `${PLATFORM_NAMES[key]}账号`;
@@ -134,7 +107,7 @@ async function loadAccounts() {
 }
 
 async function refreshMissingProfiles(accounts) {
-  const pending = ['xiaohongshu', 'bilibili'].flatMap((key) =>
+  const pending = ['bilibili'].flatMap((key) =>
     (accounts[key] || []).filter((account) => account.bound && account.profile_needs_refresh).map((account) => ({ key, id: account.id }))
   );
   if (!pending.length) return;
@@ -214,7 +187,6 @@ function startPolling(binding) {
 
 async function beginBinding(key, presetRemark = '', accountId = '') {
   if (activeBinding) return showToast('请先完成当前账号的扫码绑定', 'error');
-  if (key === 'xiaohongshu' && !(await confirmXhsRisk())) return;
   const panel = platformPanel(key);
   const remarkField = panel.querySelector('.account-remark');
   const remark = presetRemark || remarkField.value.trim();

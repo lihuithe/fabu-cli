@@ -31,7 +31,7 @@
 
 (function configurePlatformRules(){
   const ratioCard=document.querySelector('.cover-card[data-ratio="3:4"]');
-  if(ratioCard&&!selectedPlatforms().length)ratioCard.querySelector('.cover-use').textContent='用于：抖音、竖屏小红书、视频号';
+  if(ratioCard&&!selectedPlatforms().length)ratioCard.querySelector('.cover-use').textContent='用于：抖音、快手、视频号';
   updateCovers();
 })();
 
