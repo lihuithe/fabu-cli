@@ -99,9 +99,9 @@ test("抖音登录定位使用稳定文案并滚动到登录卡片", async () =>
   assert.equal(scrolled, true);
 });
 
-test("小红书和B站优先使用当前页面稳定属性定位登录区", async () => {
+test("抖音和B站优先使用当前页面稳定属性定位登录区", async () => {
   for (const [platform, expectedSelector] of [
-    ["xiaohongshu", 'input[placeholder="手机号"]'],
+    ["douyin", 'article:has-text("扫码登录")'],
     ["bilibili", 'img[alt="Scan me!"]']
   ]) {
     let requestedSelector = "";
@@ -129,7 +129,7 @@ test("小红书和B站优先使用当前页面稳定属性定位登录区", asyn
 test("发布时可识别四个平台登录页 URL 和视频号 iframe 登录提示", async () => {
   const urlCases = [
     ["douyin", "https://creator.douyin.com/login?redirect=/creator-micro/content/upload"],
-    ["xiaohongshu", "https://creator.xiaohongshu.com/new/login?redirect=/publish/publish"],
+    ["kuaishou", "https://passport.kuaishou.com/pc/account/login/"],
     ["channels", "https://channels.weixin.qq.com/login.html"],
     ["bilibili", "https://passport.bilibili.com/login"]
   ];

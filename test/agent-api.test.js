@@ -98,7 +98,10 @@ test('CLI 后台服务独立于命令生命周期，同一目录启动复用同�
   assert.equal(repeated.json.data.pid, started.json.data.pid);
   const instance = await discoverService(root);
   const capabilities = await requestService(instance, '/capabilities');
-  assert.equal(capabilities.platforms.xiaohongshu.video.submit, false);
+  assert.equal(capabilities.platforms.xiaohongshu, undefined);
+  assert.equal(capabilities.platforms.douyin.image_text.submit, true);
+  assert.equal(capabilities.platforms.kuaishou.image_text.submit, false);
+  assert.equal(capabilities.platforms.channels.image_text.submit, false);
   const mode = fs.statSync(path.join(root, '.fabu', 'instance.json')).mode & 0o777;
   if (process.platform !== 'win32') assert.equal(mode, 0o600);
   const stop = await run(root, 'service', 'stop');

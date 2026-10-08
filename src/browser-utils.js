@@ -473,7 +473,29 @@ async function openDeclaration(page, platformKey) {
   return true;
 }
 
+export const DOUYIN_DECLARATION_PLACEHOLDER = "请选择自主声明";
+// 抖音页面结构（2026-10 现场 HTML）：section > .title-xxx「自主声明」 + .selectBox-xxx > .selectText-xxx「请选择自主声明」
+const DOUYIN_DECLARATION_TEXT = 'section:has(div:text-is("自主声明")) [class*="selectBox"] [class*="selectText"]';
+
+export async function douyinDeclarationText(page) {
+  const nodes = page.locator(DOUYIN_DECLARATION_TEXT);
+  for (let i = 0; i < Math.min(await nodes.count().catch(() => 0), 4); i += 1) {
+    const node = nodes.nth(i);
+    if (await node.isVisible({ timeout: 100 }).catch(() => false)) return (await node.innerText({ timeout: 300 }).catch(() => "")).trim();
+  }
+  return null;
+}
+
+// 只有页面上的声明框已显示所选值（不再是占位符）才算设置成功，避免“弹窗关了但没生效”被当成已填写。
+export function douyinDeclarationApplied(displayed, declaration) {
+  const text = String(displayed ?? "").replace(/\s+/g, "");
+  if (!text || text === DOUYIN_DECLARATION_PLACEHOLDER) return false;
+  return text.includes(String(declaration).replace(/\s+/g, "")) || !text.includes("请选择");
+}
+
 async function setDouyinDeclaration(page, declaration) {
+  const current = await douyinDeclarationText(page);
+  if (current && current.includes(declaration)) return true;
   if (!(await openDeclaration(page, "douyin"))) return false;
   const modal = await visibleFirst(page, ['.semi-modal-content:has-text("对作品内容添加声明")', '.semi-modal-content:has-text("请选择声明类型")'], 900);
   if (!modal) return false;
@@ -493,7 +515,14 @@ async function setDouyinDeclaration(page, declaration) {
     if (!(await confirm.isVisible({ timeout: 500 }))) return false;
     await safeClick(confirm, "确认抖音自主声明");
     await modal.waitFor({ state: "hidden", timeout: 3_000 });
-    return true;
+    const deadline = Date.now() + 3_000;
+    let displayed = await douyinDeclarationText(page);
+    // 找不到声明框文本（页面改版）时保持旧行为；能读到时必须已脱离占位符。
+    while (displayed !== null && !douyinDeclarationApplied(displayed, declaration) && Date.now() < deadline) {
+      await page.waitForTimeout(150);
+      displayed = await douyinDeclarationText(page);
+    }
+    return displayed === null || douyinDeclarationApplied(displayed, declaration);
   } catch { return false; }
 }
 

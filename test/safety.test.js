@@ -16,7 +16,7 @@ test("用途名称本身是最终动作时也会被阻止", async () => {
 });
 
 test("四个平台和所需封面比例完整", () => {
-  assert.deepEqual(Object.keys(PLATFORMS), ["douyin", "xiaohongshu", "channels", "bilibili"]);
+  assert.deepEqual(Object.keys(PLATFORMS), ["douyin", "kuaishou", "channels", "bilibili"]);
   assert.deepEqual(new Set(Object.values(PLATFORMS).flatMap(platform => platform.coverRatios)), new Set(["3:4", "4:3", "16:9"]));
 });
 

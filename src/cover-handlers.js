@@ -2,6 +2,49 @@ import fs from "node:fs";
 import { CoverUploadError, mediaSignature, safeClick, visibleUploadError, waitForMediaChange } from "./browser-utils.js";
 import { douyinCoverRatios } from "./platforms.js";
 
+// 单次即时检查页面封面卡片是否已刷新，仅用于日志，不等待、不抛错。
+export async function douyinCoverPreviewChangedNow(verticalCard, beforeVertical, horizontalCard, beforeHorizontal) {
+  const changed = async (card, before) => {
+    const current = await mediaSignature(card).catch(() => "");
+    return Boolean(current) && current !== before;
+  };
+  return await changed(verticalCard, beforeVertical) && await changed(horizontalCard, beforeHorizontal);
+}
+
+const DOUYIN_UPLOAD_SUCCESS = /^\s*上传成功[！!。]?\s*$/;
+
+async function visibleUploadSuccessCount(page) {
+  const nodes = page.getByText(DOUYIN_UPLOAD_SUCCESS);
+  let visible = 0;
+  for (let i = 0; i < Math.min(await nodes.count().catch(() => 0), 12); i += 1) {
+    if (await nodes.nth(i).isVisible({ timeout: 80 }).catch(() => false)) visible += 1;
+  }
+  return visible;
+}
+
+// 抖音封面弹窗内单张封面上传成功的判定：出现新的“上传成功”提示，或弹窗预览变化。
+// 平台报错（visibleUploadError）立即失败；两者都没出现则超时失败（仍然致命）。
+// 调用前应先用 douyinUploadSuccessBaseline 记录已有提示数量，避免上一张封面的旧提示被误当作本次成功。
+export async function douyinUploadSuccessBaseline(page) {
+  return visibleUploadSuccessCount(page);
+}
+
+export async function waitDouyinCoverDialogSuccess(page, modal, before, timeoutMs = 30_000, successBaseline = 0) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (page.isClosed()) throw new CoverUploadError("浏览器已关闭");
+    const error = await visibleUploadError(page);
+    if (error) throw new CoverUploadError(error);
+    if (await visibleUploadSuccessCount(page) > successBaseline) return "upload_success_text";
+    try {
+      const current = await mediaSignature(modal);
+      if (current && current !== before) return "dialog_preview_changed";
+    } catch {}
+    await page.waitForTimeout(300);
+  }
+  throw new CoverUploadError("封面弹窗未提示上传成功，也未出现新预览");
+}
+
 async function waitLoop(page, timeoutMs, action, timeoutMessage, interval = 300) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -13,6 +56,27 @@ async function waitLoop(page, timeoutMs, action, timeoutMessage, interval = 300)
     await new Promise(resolve => setTimeout(resolve, interval));
   }
   throw new CoverUploadError(timeoutMessage);
+}
+
+// 抖音新版上传页在视频上传期间就显示封面入口；此时设置的自定义封面会被平台静默丢弃
+// （弹窗提示上传成功，但封面卡片不更新）。因此先等视频真正上传完成再打开封面弹窗。
+export async function waitDouyinVideoUploaded(page, job, platform, log, timeoutMs = 900_000, next = "设置自定义封面") {
+  const deadline = Date.now() + timeoutMs;
+  let lastLog = 0;
+  let neitherSince = 0;
+  while (Date.now() < deadline) {
+    if (page.isClosed()) throw new CoverUploadError("浏览器已关闭");
+    const uploading = await page.getByText(/取消上传|上传过程中请不要删除/).first().isVisible({ timeout: 150 }).catch(() => false);
+    const done = await page.getByText(/^\s*重新上传\s*$/).first().isVisible({ timeout: 150 }).catch(() => false);
+    if (done && !uploading) { log(`[${platform.name}/${job.account}] 视频已上传完成，开始${next}`); return; }
+    if (!done && !uploading) {
+      neitherSince ||= Date.now();
+      if (Date.now() - neitherSince > 20_000) { log(`[${platform.name}/${job.account}] 未识别到上传进度/重新上传标识，继续${next}`); return; }
+    } else neitherSince = 0;
+    if (Date.now() - lastLog > 15_000) { log(`[${platform.name}/${job.account}] 等待视频上传完成后再${next}…`); lastLog = Date.now(); }
+    await page.waitForTimeout(500);
+  }
+  throw new CoverUploadError("等待抖音视频上传完成超时");
 }
 
 async function uploadDouyin(page, job, platform, log) {
@@ -28,6 +92,7 @@ async function uploadDouyin(page, job, platform, log) {
     const horizontalCard = page.locator('div.coverControl-CjlzqC:has-text("横封面")').first();
     const entry = page.locator('xpath=//div[@class="filter-k_CjvJ"]').first();
     await waitLoop(page, 180_000, async () => await verticalCard.isVisible({ timeout: 150 }) && await horizontalCard.isVisible({ timeout: 150 }) && await entry.isVisible({ timeout: 150 }), "等待抖音视频上传完成及封面入口就绪超时", 350);
+    await waitDouyinVideoUploaded(page, job, platform, log);
     const beforeVertical = await mediaSignature(verticalCard);
     const beforeHorizontal = await mediaSignature(horizontalCard);
     stage = "打开封面设置弹窗";
@@ -39,9 +104,10 @@ async function uploadDouyin(page, job, platform, log) {
     await inputs.first().waitFor({ state: "attached", timeout: 10_000 });
     if (await inputs.count() !== 1) throw new CoverUploadError(`${coverName(firstRatio)}上传 input 数量异常：${await inputs.count()}`);
     const beforeModal = await mediaSignature(modal);
+    const firstBaseline = await douyinUploadSuccessBaseline(page);
     await inputs.first().setInputFiles(covers[firstRatio]);
-    await waitForMediaChange(page, modal, beforeModal, 30_000);
-    log(`[${platform.name}/${job.account}] ${coverName(firstRatio)}已真正上传：${covers[firstRatio]}`);
+    const firstSignal = await waitDouyinCoverDialogSuccess(page, modal, beforeModal, 30_000, firstBaseline);
+    log(`[${platform.name}/${job.account}] ${coverName(firstRatio)}已在封面弹窗内上传成功（${firstSignal}）：${covers[firstRatio]}`);
     stage = `切换${coverName(secondRatio)}标签`;
     const steps = modal.locator('xpath=.//div[contains(concat(" ", normalize-space(@class), " "), " step-dXVbPX ")]');
     if (await steps.count() < 2) throw new CoverUploadError(`${coverName(secondRatio)}选项数量不足`);
@@ -51,16 +117,22 @@ async function uploadDouyin(page, job, platform, log) {
     inputs = modal.locator('xpath=.//div[@class="semi-upload upload-BvM5FF"]//input[@class="semi-upload-hidden-input"]');
     await inputs.first().waitFor({ state: "attached", timeout: 10_000 });
     const beforeSecondModal = await mediaSignature(modal);
+    const secondBaseline = await douyinUploadSuccessBaseline(page);
     await inputs.first().setInputFiles(covers[secondRatio]);
-    await waitForMediaChange(page, modal, beforeSecondModal, 30_000);
-    log(`[${platform.name}/${job.account}] ${coverName(secondRatio)}已真正上传：${covers[secondRatio]}`);
+    const secondSignal = await waitDouyinCoverDialogSuccess(page, modal, beforeSecondModal, 30_000, secondBaseline);
+    log(`[${platform.name}/${job.account}] ${coverName(secondRatio)}已在封面弹窗内上传成功（${secondSignal}）：${covers[secondRatio]}`);
     stage = "确认封面设置";
     const complete = page.locator('button[class="semi-button semi-button-primary primary-RstHX_"], button:has-text("完成")').last();
     await complete.waitFor({ state: "visible", timeout: 10_000 });
     await safeClick(complete, "完成抖音封面设置");
-    await modal.waitFor({ state: "hidden", timeout: 10_000 });
-    await waitForMediaChange(page, verticalCard, beforeVertical, 15_000);
-    await waitForMediaChange(page, horizontalCard, beforeHorizontal, 15_000);
+    await modal.waitFor({ state: "hidden", timeout: 30_000 });
+    // 弹窗已提示上传成功并关闭即视为封面设置完成。抖音（尤其海外网络）经常不刷新页面上的封面卡片预览，
+    // 但实际发布带有新封面；因此不再等待卡片预览刷新，只做一次即时、不阻塞的检查用于日志。
+    const previewVerified = await douyinCoverPreviewChangedNow(verticalCard, beforeVertical, horizontalCard, beforeHorizontal);
+    log(previewVerified
+      ? `[${platform.name}/${job.account}] 封面弹窗已提示上传成功并关闭，页面封面预览已刷新`
+      : `[${platform.name}/${job.account}] WARNING：封面弹窗已提示上传成功并关闭，页面封面预览暂未刷新（不再等待，按已设置继续）`);
+    return { dialogConfirmed: true, previewVerified };
   } catch (error) { throw new CoverUploadError(`抖音${stage}失败：${error.message}`); }
 }
 

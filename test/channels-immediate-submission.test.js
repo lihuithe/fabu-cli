@@ -51,7 +51,8 @@ test('普通发表不接受旧同名记录、其他标题、跨行状态、空�
     }
     await page.setContent(list(record()));
     assert.equal(await channelsImmediateReceipt(page, expected, {}), null);
-    assert.equal(await channelsImmediateReceipt(page, expected, { ...context(), baseline: { available: false } }), null);
+    // README：无法读取提交前对照时，同名且“处理中”的记录以 new_post_record_without_baseline 标明（与 45630cc 的实现一致）。
+    assert.equal((await channelsImmediateReceipt(page, expected, { ...context(), baseline: { available: false } }))?.verification, 'new_post_record_without_baseline');
     assert.equal(await channelsImmediateReceipt(page, expected, { ...context(), baseline: { available: true, total: 329, matches: 1 } }), null);
     assert.equal(await channelsImmediateReceipt(page, { ...expected, scheduledAt: '2026-09-22T17:00:00+08:00' }, context()), null);
     page.url = () => 'https://channels.weixin.qq.com/platform/post/create';

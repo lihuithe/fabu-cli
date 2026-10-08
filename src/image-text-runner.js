@@ -7,6 +7,10 @@ import { centerPublishWindow, fillChannelsShortTitle } from "./runner.js";
 import { channelsImageTextContent, IMAGE_TEXT_PLATFORMS, kuaishouImageTextContent } from "./image-text-platforms.js";
 import { createPlatformWindowCloseGuard, normalizePlatformWindowError } from "./platform-window.js";
 import { setScheduledPublish } from "./schedule-publish.js";
+import { submitAndVerify, verifySubmission } from "./submission.js";
+
+// 图文自动最终发布目前只对抖音开放（与 task-schema 的能力表一致）；其他平台即便收到 submit 也拒绝点击。
+export const IMAGE_TEXT_SUBMIT_PLATFORMS = Object.freeze(["douyin"]);
 
 class ImageTextLoginExpiredError extends Error {
   constructor(message) {
@@ -258,6 +262,19 @@ export class ImageTextChromeRunner {
   run(job) { return this.#runJob(job); }
   hasOpenWindows() { return this.jobBrowsers.size > 0; }
 
+  // 只读取新的成功回执，绝不再次点击发布。
+  async verifySubmission(job) {
+    if (!this.page || this.page.isClosed()) throw new Error("原任务窗口已经关闭，请到平台核实并记录结果");
+    try {
+      const result = await verifySubmission(this.page, job.platformKey, { timeoutMs: 5_000, expected: { title: job.title, description: job.content, scheduledAt: job.scheduledAt }, context: job.submissionContext });
+      this.#submissionDiagnostic(job, { result });
+      return result;
+    } catch (error) {
+      this.#submissionDiagnostic(job, { error: { code: error.code, message: error.message } });
+      throw error;
+    }
+  }
+
   async closeWindows() {
     await Promise.allSettled([...new Set(this.jobBrowsers.values())].map(closeBrowser));
     this.jobBrowsers.clear();
@@ -281,10 +298,21 @@ export class ImageTextChromeRunner {
     this.progress(job, status, message);
   }
 
-  #report(job, success, reason = "", errorCode = "") {
+  #report(job, success, reason = "", errorCode = "", result = undefined) {
     if (this.reported.has(job)) return;
     this.reported.add(job);
-    this.completed(job, success, reason, errorCode);
+    if (result === undefined) this.completed(job, success, reason, errorCode);
+    else this.completed(job, success, reason, errorCode, result);
+  }
+
+  #submissionDiagnostic(job, detail) {
+    try {
+      const folder = job.artifactDir || path.dirname(job.images[0]);
+      fs.writeFileSync(path.join(folder, `submission_diagnostic_${job.platformKey}.json`), JSON.stringify({
+        observed_at: new Date().toISOString(), platform: job.platformKey, type: "image_text", title: job.title,
+        scheduled_at: job.scheduledAt || null, context: job.submissionContext || null, ...detail
+      }, null, 2), "utf8");
+    } catch (error) { this.log(`[${job.account}] 提交诊断日志保存失败：${error.message}`); }
   }
 
   async #snapshot(page, job, prefix) {
@@ -389,8 +417,12 @@ export class ImageTextChromeRunner {
     let browser;
     let page;
     let windowCloseGuard;
+    let closeAfterSubmit = false;
     try {
       this.#throwIfCancelled();
+      if (job.directPublish && !IMAGE_TEXT_SUBMIT_PLATFORMS.includes(job.platformKey)) {
+        throw Object.assign(new Error(`${platform.name}图文暂不支持自动最终发布`), { code: "UNSUPPORTED_CAPABILITY" });
+      }
       this.#stage(job, "launching", "正在启动独立 Chrome 窗口");
       browser = await chromium.launch({
         executablePath: chromePath(),
@@ -402,6 +434,7 @@ export class ImageTextChromeRunner {
       browser.on("disconnected", () => { this.jobBrowsers.delete(job); this.onWindowClosed?.(); });
       const context = await browser.newContext({ storageState: bindingManager.storageState(job.platformKey, job.accountId), viewport: null });
       page = await context.newPage();
+      this.page = page;
       windowCloseGuard = createPlatformWindowCloseGuard(browser, context);
       await Promise.race([
         windowCloseGuard.promise,
@@ -425,6 +458,7 @@ export class ImageTextChromeRunner {
       const uploadPage = input.page();
       if (uploadPage !== page) {
         page = uploadPage;
+        this.page = page;
         trackImageTextWindow(browser, page, message => this.log(`[${platform.name}/${job.account}] ${message}`));
         await centerPublishWindow(page);
       }
@@ -458,18 +492,49 @@ export class ImageTextChromeRunner {
       }
       await this.#saveLoginState(context, platform, job);
       await this.#snapshot(page, job, "image_text_ready");
+      if (job.directPublish) {
+        this.#throwIfCancelled();
+        job.submissionContext = { contentType: "image_text" };
+        this.#stage(job, "publishing", `正在准备${platform.name}图文提交及结果核验`);
+        // 只点击一次；未检测到明确回执时抛出 SUBMISSION_UNKNOWN，绝不自动重试。
+        job.submissionResult = await submitAndVerify(page, platform, () => {
+          this.#throwIfCancelled();
+          job.submissionStarted = true;
+          this.#stage(job, "submitting", "即将点击最终发布，已记录提交边界");
+        }, { expected: { title: job.title, description: job.content, scheduledAt: job.scheduledAt }, context: job.submissionContext });
+        this.#submissionDiagnostic(job, { result: job.submissionResult });
+        await this.#snapshot(page, job, "submission_receipt");
+        this.log(`[${platform.name}/${job.account}] 已检测到平台接受图文提交的明确回执`);
+        this.#stage(job, "ready", "平台已确认接受提交");
+        this.#report(job, true, "平台已确认接受提交，审核与公开状态以平台为准", "", job.submissionResult);
+        closeAfterSubmit = Boolean(job.closeAfterSubmit);
+        this.log(`[${platform.name}/${job.account}] 图文任务已完成${job.scheduledAt ? "，定时时间已选择" : ""}，已点击发布按钮${closeAfterSubmit ? "，即将关闭窗口" : "；浏览器保留"}`);
+        return;
+      }
       this.#stage(job, "ready", job.scheduledAt ? "图文资料与定时时间已填写，等待人工检查并发布" : "图文资料填写完成，等待人工检查并发布");
       this.#report(job, true);
       this.log(`[${platform.name}/${job.account}] 图文资料填写完成${job.scheduledAt ? "，定时时间已选择" : ""}；浏览器保留，未点击最终发布按钮`);
         })()
       ]);
+      if (closeAfterSubmit) {
+        windowCloseGuard?.dispose();
+        await closeBrowser(browser);
+      }
     } catch (caughtError) {
       const error = normalizePlatformWindowError(caughtError);
       const loginExpired = error.code === "LOGIN_EXPIRED";
       const cancelled = this.cancelled || error.message === "任务已取消";
-      if (page && !page.isClosed() && !loginExpired) await this.#snapshot(page, job, "image_text_failure");
+      if (job.submissionStarted) {
+        this.#submissionDiagnostic(job, { error: { code: error.code, message: error.message } });
+        this.log(`[${platform.name}/${job.account}] 未能核实图文提交，已保存 submission_diagnostic_${job.platformKey}.json 和提交现场截图；请核实原任务，不要重新发布`);
+      }
+      if (page && !page.isClosed() && !loginExpired) await this.#snapshot(page, job, job.submissionStarted ? "submission_unknown" : "image_text_failure");
       this.#stage(job, cancelled ? "cancelled" : "failed", cancelled ? "任务已取消" : error.message);
-      this.#report(job, false, cancelled ? "任务已取消" : error.message, error.code || (loginExpired ? "LOGIN_EXPIRED" : 'AUTOMATION_FAILED'));
+      if (job.directPublish) {
+        this.#report(job, false, cancelled ? "任务已取消" : error.message, job.submissionStarted ? "SUBMISSION_UNKNOWN" : error.code || (loginExpired ? "LOGIN_EXPIRED" : "AUTOMATION_FAILED"), { outcome: job.submissionStarted ? "submission_unknown" : "failed" });
+      } else {
+        this.#report(job, false, cancelled ? "任务已取消" : error.message, error.code || (loginExpired ? "LOGIN_EXPIRED" : 'AUTOMATION_FAILED'));
+      }
       if (loginExpired) await closeBrowser(browser);
       const retainBrowser = !loginExpired && page && !page.isClosed();
       if (!retainBrowser) await closeBrowser(browser);

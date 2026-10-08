@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium } from "playwright";
 import { chromePath } from "../src/account-binding.js";
-import { appendTopics, setChannelsLocationHidden, setChannelsOriginal, setChannelsOriginalIfAvailable, setRights, setXiaohongshuOriginal, shouldSkipDeclaration } from "../src/browser-utils.js";
-import { confirmDefaultCover, findXiaohongshuCoverEntry } from "../src/cover-handlers.js";
-import { channelsCoverRatios, channelsShortTitleStatus, coverSetStatus, douyinCoverRatios, normalizeChannelsShortTitle, originalForPlatform, PLATFORMS, scheduledTimeStatus, xiaohongshuCoverRatio } from "../src/platforms.js";
+import { appendTopics, douyinDeclarationApplied, setChannelsLocationHidden, setChannelsOriginal, setChannelsOriginalIfAvailable, setRights, shouldSkipDeclaration } from "../src/browser-utils.js";
+import { confirmDefaultCover, douyinUploadSuccessBaseline, uploadCovers, waitDouyinCoverDialogSuccess } from "../src/cover-handlers.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { channelsCoverRatios, channelsShortTitleStatus, coverSetStatus, douyinCoverRatios, normalizeChannelsShortTitle, PLATFORMS, scheduledTimeStatus } from "../src/platforms.js";
 import { channelsDescription, fillChannelsShortTitle } from "../src/runner.js";
 import { setScheduledPublish } from "../src/schedule-publish.js";
 
@@ -44,94 +47,6 @@ test("视频号短标题会替换逗号并限制特殊字符", () => {
   assert.equal(channelsShortTitleStatus("不支持！句号。").valid, false);
   assert.match(channelsShortTitleStatus("不支持！句号。").message, /特殊字符/);
   assert.match(channelsShortTitleStatus("一二三四五六七八九十一二三四五六七").message, /16个字/);
-});
-
-test("原创勾选只传给小红书", () => {
-  assert.equal(originalForPlatform("xiaohongshu", true), true);
-  assert.equal(originalForPlatform("douyin", true), false);
-  assert.equal(originalForPlatform("channels", true), false);
-  assert.equal(originalForPlatform("bilibili", true), false);
-  assert.equal(originalForPlatform("xiaohongshu", false), false);
-});
-
-test("小红书原创声明会先勾选协议再点击声明原创", async () => {
-  const browser = await chromium.launch({ executablePath: chromePath(), headless: true });
-  try {
-    const page = await browser.newPage();
-    await page.setContent(`
-      <div class="original-row">
-        <span>原创声明</span>
-        <div class="custom-switch-switch">
-          <div id="original-switch" class="d-switch d-clickable d-switch-default d-inline-block">
-            <div class="d-switch-box"><div class="d-switch-top">
-              <span class="d-switch-simulator unchecked --color-bg-fill">
-                <input id="original" type="checkbox" value="true">
-                <span class="d-switch-indicator"></span>
-              </span>
-            </div></div>
-          </div>
-        </div>
-      </div>
-      <div id="original-modal" hidden>
-        <div class="d-grid d-checkbox d-checkbox-main-label d-clickable bg-red">
-          <span class="d-checkbox-simulator unchecked"></span>
-          <input id="agreement" type="checkbox">
-          <span>我已阅读并同意《原创声明须知》，如滥用声明，平台将驳回并予以相关处置</span>
-        </div>
-        <button id="confirm" type="button" class="d-button disabled" disabled>
-          <span>声明原创</span>
-        </button>
-      </div>
-      <script>
-        window.originalActions = [];
-        const originalSwitch = document.querySelector("#original-switch");
-        const original = document.querySelector("#original");
-        const modal = document.querySelector("#original-modal");
-        const agreementControl = document.querySelector(".d-checkbox-main-label");
-        const agreement = document.querySelector("#agreement");
-        const confirm = document.querySelector("#confirm");
-        originalSwitch.addEventListener("click", () => {
-          window.originalActions.push("打开原创声明");
-          modal.hidden = false;
-        });
-        agreementControl.addEventListener("click", event => {
-          if (event.target !== agreement) agreement.checked = !agreement.checked;
-          window.originalActions.push("勾选协议");
-          confirm.disabled = !agreement.checked;
-          confirm.classList.toggle("disabled", confirm.disabled);
-        });
-        confirm.addEventListener("click", () => {
-          window.originalActions.push("声明原创");
-          original.checked = true;
-          modal.hidden = true;
-        });
-      </script>
-    `);
-
-    assert.equal(await setXiaohongshuOriginal(page, true), true);
-    assert.equal(await page.isChecked("#original"), true);
-    assert.equal(await page.isChecked("#agreement"), true);
-    assert.deepEqual(await page.evaluate(() => window.originalActions), ["打开原创声明", "勾选协议", "声明原创"]);
-  } finally {
-    await browser.close();
-  }
-});
-
-test("小红书账号未提供原创声明控件时会跳过并继续", async () => {
-  const browser = await chromium.launch({ executablePath: chromePath(), headless: true });
-  try {
-    const page = await browser.newPage();
-    await page.setContent('<div class="publish-form"><span>定时发布</span></div>');
-    const logs = [];
-    await setRights(page, {
-      account: "无原创控件账号",
-      declaration: "无需内容标注",
-      original: true
-    }, message => logs.push(message), PLATFORMS.xiaohongshu);
-    assert.equal(logs.some(message => message.includes("当前账号未提供原创声明控件，已跳过")), true);
-  } finally {
-    await browser.close();
-  }
 });
 
 test("视频号原创声明会先打开弹窗、勾选协议再确认声明", async () => {
@@ -339,7 +254,7 @@ test("抖音先开启定时发布，再按 yyyy-MM-dd HH:mm 填入日期时间",
   }
 });
 
-test("小红书、B站和视频号会在开启后填入用户选择的时间", async () => {
+test("B站和视频号会在开启后填入用户选择的时间", async () => {
   const browser = await chromium.launch({ executablePath: chromePath(), headless: true });
   const value = futureScheduleValue();
   const [targetDate, targetTime] = value.split("T");
@@ -350,52 +265,6 @@ test("小红书、B站和视频号会在开启后填入用户选择的时间", a
   const otherMinute = String((Number(targetMinute) + 1) % 60).padStart(2, "0");
   try {
     const page = await browser.newPage();
-    await page.setContent(`
-      <style>body{min-width:1000px;min-height:720px}.post-time-date-picker-popover-class{width:520px;margin-left:220px}</style>
-      <div class="post-time-wrapper">
-        <div class="post-time-switch-container">定时发布 <span class="d-switch-simulator unchecked --color-bg-fill"><input type="checkbox" value="true"><span class="d-switch-indicator"></span></span></div>
-        <input class="d-text" hidden value="">
-      </div>
-      <div class="d-popover post-time-date-picker-popover-class" hidden>
-        <div class="d-datepicker-header">
-          <div class="--space-p-extra-small"><span class="d-clickable">上年</span></div>
-          <div class="--space-p-extra-small"><span class="d-clickable">上月</span></div>
-          <div class="d-datepicker-header-main"><div class="d-datepicker-selector"><h6>${previousMonth.getFullYear()}年</h6><h6>${previousMonth.getMonth() + 1}月</h6></div></div>
-          <div class="--space-p-extra-small"><span id="xhs-next-month" class="d-clickable">下月</span></div>
-          <div class="--space-p-extra-small"><span class="d-clickable">下年</span></div>
-        </div>
-        <div class="d-datepicker-dates"><div id="xhs-target-day" class="d-datepicker-cell d-clickable disabled"><span class="d-text">${targetDay}</span></div></div>
-        <div class="d-timepicker-body">
-          <div class="d-timepicker-timebar"><div class="d-timepicker-time d-clickable active"><span>${otherHour}</span><span>时</span></div><div class="d-timepicker-time d-clickable"><span>${targetHour}</span></div></div>
-          <div class="d-timepicker-timebar"><div class="d-timepicker-time d-clickable active"><span>${otherMinute}</span><span>分</span></div><div class="d-timepicker-time d-clickable"><span>${targetMinute}</span></div></div>
-        </div>
-      </div>
-      <script>
-        const xhsSwitch = document.querySelector('.d-switch-simulator');
-        const xhsInput = document.querySelector('.post-time-wrapper input.d-text');
-        const xhsPopover = document.querySelector('.post-time-date-picker-popover-class');
-        const xhsLabels = document.querySelectorAll('.d-datepicker-selector h6');
-        const xhsDay = document.querySelector('#xhs-target-day');
-        const xhsColumns = document.querySelectorAll('.d-timepicker-timebar');
-        let xhsHour = '';
-        let xhsMinute = '';
-        window.xhsScheduleActions = [];
-        window.xhsOutsideClicks = 0;
-        xhsSwitch.onclick = () => { xhsSwitch.querySelector('input').checked = true; xhsSwitch.classList.remove('unchecked'); xhsSwitch.classList.add('checked'); xhsInput.hidden = false; window.xhsScheduleActions.push('toggle'); };
-        xhsInput.onclick = () => { xhsPopover.hidden = false; window.xhsScheduleActions.push('open'); };
-        document.querySelector('#xhs-next-month').onclick = () => { xhsLabels[0].textContent = '${targetYear}年'; xhsLabels[1].textContent = '${targetMonth}月'; xhsDay.classList.remove('disabled'); window.xhsScheduleActions.push('month'); };
-        xhsDay.onclick = () => { xhsDay.classList.add('picked'); window.xhsScheduleActions.push('date'); };
-        xhsColumns[0].querySelectorAll('.d-timepicker-time').forEach(item => item.onclick = () => { xhsColumns[0].querySelectorAll('.d-timepicker-time').forEach(option => option.classList.remove('active')); item.classList.add('active'); xhsHour = item.innerText.replace(/\\D/g, '').padStart(2, '0'); window.xhsScheduleActions.push('hour'); });
-        xhsColumns[1].querySelectorAll('.d-timepicker-time').forEach(item => item.onclick = () => { xhsColumns[1].querySelectorAll('.d-timepicker-time').forEach(option => option.classList.remove('active')); xhsMinute = item.innerText.replace(/\\D/g, '').padStart(2, '0'); xhsInput.value = '${targetDate} ' + xhsHour + ':' + xhsMinute; xhsPopover.remove(); window.xhsScheduleActions.push('minute'); });
-        document.body.addEventListener('click', event => { if (xhsPopover.contains(event.target) || xhsInput.contains(event.target) || xhsSwitch.contains(event.target)) return; if (!xhsPopover.hidden) { window.xhsOutsideClicks += 1; xhsPopover.hidden = true; } });
-      </script>
-    `);
-    await setScheduledPublish(page, PLATFORMS.xiaohongshu, value);
-    assert.equal(await page.inputValue('.post-time-wrapper input.d-text'), value.replace("T", " "));
-    assert.deepEqual(await page.evaluate(() => window.xhsScheduleActions), ["toggle", "open", "month", "date", "hour", "minute"]);
-    assert.equal(await page.evaluate(() => window.xhsOutsideClicks), 0);
-    assert.equal(await page.locator('.post-time-date-picker-popover-class').count(), 0);
-
     await page.setContent(`
       <style>body{min-width:1000px;min-height:720px}.date-picker-date-wrp{display:inline-block;width:170px}.date-picker-time-panel{width:130px}</style>
       <div class="time-container"><span>定时发布</span><button type="button" class="switch-container">开启</button></div>
@@ -496,19 +365,6 @@ test("小红书、B站和视频号会在开启后填入用户选择的时间", a
   }
 });
 
-test("小红书选择无需内容标注时跳过平台声明操作", () => {
-  assert.equal(shouldSkipDeclaration("xiaohongshu", "无需内容标注"), true);
-  assert.equal(shouldSkipDeclaration("xiaohongshu", "内容包含营销广告"), false);
-  assert.equal(shouldSkipDeclaration("douyin", "无需内容标注"), false);
-});
-
-test("小红书根据视频方向选择封面比例", () => {
-  assert.equal(xiaohongshuCoverRatio(1280, 720), "4:3");
-  assert.equal(xiaohongshuCoverRatio(1080, 1440), "3:4");
-  assert.equal(xiaohongshuCoverRatio(1080, 1080), "3:4");
-  assert.equal(xiaohongshuCoverRatio(0, 0), "3:4");
-});
-
 test("视频号横屏视频同时使用竖版和横版封面", () => {
   assert.deepEqual(channelsCoverRatios(1280, 720), ["3:4", "4:3"]);
   assert.deepEqual(channelsCoverRatios(1080, 1440), ["3:4"]);
@@ -525,30 +381,6 @@ test("双封面平台只允许整套上传或全部使用默认封面", () => {
   assert.deepEqual(coverSetStatus(["3:4", "4:3"], []), { mode: "default", missing: [] });
   assert.deepEqual(coverSetStatus(["3:4", "4:3"], ["3:4"]), { mode: "incomplete", missing: ["4:3"] });
   assert.deepEqual(coverSetStatus(["3:4", "4:3"], ["3:4", "4:3"]), { mode: "custom", missing: [] });
-});
-
-test("小红书横屏视频使用 row 布局时也能找到封面入口", async () => {
-  const browser = await chromium.launch({
-    executablePath: chromePath(),
-    headless: true
-  });
-  try {
-    const page = await browser.newPage();
-    await page.setContent(`
-      <section class="publish-page-content-cover">
-        <div class="publish-page-content-cover-content">
-          <div class="cover">
-            <div class="operator default row center noCover pointer">修改封面</div>
-          </div>
-        </div>
-      </section>
-    `);
-    const entry = await findXiaohongshuCoverEntry(page, 1_000);
-    assert.equal(await entry.innerText(), "修改封面");
-    assert.equal(await entry.evaluate(element => element.classList.contains("row")), true);
-  } finally {
-    await browser.close();
-  }
 });
 
 test("抖音默认封面按文字设置横封面后返回竖封面完成", async () => {
@@ -787,6 +619,145 @@ test("B站可选择挂在页面浮层中的创作声明并正确验证", async (
       original: false
     }, () => {}, PLATFORMS.bilibili);
     assert.equal(await page.locator(".bcc-select-input-value").innerText(), "含AI生成内容");
+  } finally {
+    await browser.close();
+  }
+});
+
+// ---- 抖音封面：弹窗提示上传成功并关闭后不再等待页面预览（本地改动）----
+
+function douyinCoverFixture({ failUpload = false, refreshCards = false } = {}) {
+  return `
+    <div class="coverControl-CjlzqC" id="vcard">竖封面<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw="><div class="filter-k_CjvJ">选择封面</div></div>
+    <div class="coverControl-CjlzqC" id="hcard">横封面<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></div>
+    <span>重新上传</span>
+    <div id="toasts"></div>
+    <div id="dy-creator-content-modal-body" style="display:none">
+      <div class="step-dXVbPX step-active-AWDV7U"><span>设置竖封面</span></div>
+      <div class="step-dXVbPX"><span>设置横封面</span></div>
+      <div class="semi-upload upload-BvM5FF"><input type="file" class="semi-upload-hidden-input"></div>
+      <button class="semi-button semi-button-primary primary-RstHX_">完成</button>
+    </div>
+    <script>
+      window.coverActions = [];
+      const modal = document.getElementById('dy-creator-content-modal-body');
+      document.querySelector('.filter-k_CjvJ').onclick = () => { modal.style.display = 'block'; window.coverActions.push('open'); };
+      document.querySelectorAll('.step-dXVbPX')[1].onclick = () => window.coverActions.push('switch');
+      document.querySelector('.semi-upload-hidden-input').addEventListener('change', () => {
+        const toast = document.createElement('div');
+        toast.className = 'semi-toast-content';
+        toast.textContent = ${failUpload ? "'上传失败，请重试'" : "'上传成功'"};
+        document.getElementById('toasts').appendChild(toast);
+        window.coverActions.push('upload');
+      });
+      document.querySelector('.primary-RstHX_').onclick = () => {
+        modal.style.display = 'none'; window.coverActions.push('complete');
+        ${refreshCards ? "document.querySelectorAll('.coverControl-CjlzqC img').forEach((img, i) => { img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACw=' + i; });" : ""}
+      };
+    </script>`;
+}
+
+function coverJob() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dy-cover-"));
+  const vertical = path.join(dir, "v.png");
+  const horizontal = path.join(dir, "h.png");
+  fs.writeFileSync(vertical, "v");
+  fs.writeFileSync(horizontal, "h");
+  return { account: "测试账号", videoWidth: 1080, videoHeight: 1920, covers: { "3:4": vertical, "4:3": horizontal } };
+}
+
+test("抖音封面弹窗提示上传成功并关闭后，页面预览不刷新只记录 WARNING，不再等待", async () => {
+  const browser = await chromium.launch({ executablePath: chromePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(douyinCoverFixture());
+    const logs = [];
+    const started = Date.now();
+    const result = await uploadCovers(page, coverJob(), PLATFORMS.douyin, message => logs.push(message));
+    assert.deepEqual(result, { dialogConfirmed: true, previewVerified: false });
+    assert.ok(Date.now() - started < 10_000, "弹窗关闭后不应再等待页面预览刷新");
+    assert.deepEqual(await page.evaluate(() => window.coverActions), ["open", "upload", "switch", "upload", "complete"]);
+    assert.ok(logs.some(message => message.includes("WARNING") && message.includes("预览暂未刷新")));
+    assert.equal(logs.filter(message => message.includes("upload_success_text")).length, 2, "第二张封面也必须看到新的“上传成功”提示");
+  } finally {
+    await browser.close();
+  }
+});
+
+test("抖音封面页面预览已刷新时记录已刷新", async () => {
+  const browser = await chromium.launch({ executablePath: chromePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(douyinCoverFixture({ refreshCards: true }));
+    const logs = [];
+    const result = await uploadCovers(page, coverJob(), PLATFORMS.douyin, message => logs.push(message));
+    assert.deepEqual(result, { dialogConfirmed: true, previewVerified: true });
+    assert.equal(logs.some(message => message.includes("WARNING")), false);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("抖音封面弹窗本身报错时仍然致命，不会继续点击完成", async () => {
+  const browser = await chromium.launch({ executablePath: chromePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(douyinCoverFixture({ failUpload: true }));
+    await assert.rejects(uploadCovers(page, coverJob(), PLATFORMS.douyin, () => {}), error => error.message.includes("上传竖封面失败") && error.message.includes("上传失败"));
+    assert.equal((await page.evaluate(() => window.coverActions)).includes("complete"), false);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("抖音封面弹窗始终没有提示上传成功时超时失败，旧的成功提示不算本次", async () => {
+  const browser = await chromium.launch({ executablePath: chromePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<div id="modal"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></div><div class="semi-toast-content">上传成功</div>');
+    const modal = page.locator("#modal");
+    const before = await modal.evaluate(element => element.innerHTML);
+    const baseline = await douyinUploadSuccessBaseline(page);
+    assert.equal(baseline, 1);
+    await assert.rejects(waitDouyinCoverDialogSuccess(page, modal, "img:data:image/gif;base64,R0lGODlhAQABAAAAACw=", 800, baseline), /未提示上传成功/);
+    assert.ok(before);
+    await page.evaluate(() => { const t = document.createElement('div'); t.className = 'semi-toast-content'; t.textContent = '上传成功'; document.body.appendChild(t); });
+    assert.equal(await waitDouyinCoverDialogSuccess(page, modal, "img:data:image/gif;base64,R0lGODlhAQABAAAAACw=", 800, baseline), "upload_success_text");
+  } finally {
+    await browser.close();
+  }
+});
+
+function douyinDeclarationFixture(apply) {
+  return `
+    <section class="wrapper-MLZdnB"><div class="labelWrapper-p6osJm"><div class="title-cnbkZe">自主声明</div></div>
+      <div class="controlWrapper-Kt_9Xm"><div class="selectBox-buZRzi"><div class="selectText-XSrMFZ ">请选择自主声明</div></div></div></section>
+    <div class="semi-modal-content" style="display:none"><div>对作品内容添加声明</div>
+      <label><input type="radio" name="d"><span>内容由AI生成</span></label>
+      <label><input type="radio" name="d"><span>内容为个人观点或见解</span></label>
+      <button class="semi-button semi-button-primary">确定</button></div>
+    <script>
+      const modal = document.querySelector('.semi-modal-content');
+      let picked = '';
+      document.querySelector('.selectBox-buZRzi').onclick = () => { modal.style.display = 'block'; };
+      modal.querySelectorAll('label').forEach(label => label.onclick = () => { picked = label.innerText.trim(); });
+      modal.querySelector('button').onclick = () => { modal.style.display = 'none'; ${apply ? "document.querySelector('.selectText-XSrMFZ').textContent = picked;" : ""} };
+    </script>`;
+}
+
+test("抖音自主声明必须在页面声明框显示所选值才算成功，仍是占位符时报错", async () => {
+  assert.equal(douyinDeclarationApplied("请选择自主声明", "内容由AI生成"), false);
+  assert.equal(douyinDeclarationApplied("", "内容由AI生成"), false);
+  assert.equal(douyinDeclarationApplied("内容由AI生成", "内容由AI生成"), true);
+  const browser = await chromium.launch({ executablePath: chromePath(), headless: true });
+  try {
+    const page = await browser.newPage();
+    const job = { account: "测试账号", declaration: "内容由AI生成" };
+    await page.setContent(douyinDeclarationFixture(true));
+    await setRights(page, job, () => {}, PLATFORMS.douyin);
+    assert.equal((await page.locator(".selectText-XSrMFZ").innerText()).trim(), "内容由AI生成");
+    await page.setContent(douyinDeclarationFixture(false));
+    await assert.rejects(setRights(page, job, () => {}, PLATFORMS.douyin), /抖音声明同步失败/);
   } finally {
     await browser.close();
   }

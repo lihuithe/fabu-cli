@@ -3,6 +3,7 @@ import { AppError } from './errors.js';
 import { DateTime } from 'luxon';
 import { kuaishouImmediateReceipt } from './kuaishou-receipt.js';
 import { captureChannelsBaseline, channelsImmediateReceipt, CHANNELS_LIST_URL } from './channels-receipt.js';
+import { douyinImageTextReceipt, isDouyinManagePage } from './douyin-receipt.js';
 
 // Scheduled Channels posts return to the list without a success toast. Read the
 // rendered record (including open shadow roots), never infer success from the URL.
@@ -66,7 +67,8 @@ export async function verifySubmission(page, platformKey, { timeoutMs = 30_000, 
   do {
     const receipt = (await visibleReceipts(page, platformKey)).find(r => !prior.has(`${r.url}:${r.text}`))
       || (platformKey === 'channels' ? await channelsScheduledReceipt(page, expected) || await channelsImmediateReceipt(page, expected, context) : null)
-      || (platformKey === 'kuaishou' ? await kuaishouImmediateReceipt(page, expected, context) : null);
+      || (platformKey === 'kuaishou' ? await kuaishouImmediateReceipt(page, expected, context) : null)
+      || (platformKey === 'douyin' ? await douyinImageTextReceipt(page, expected, context) : null);
     if (receipt) return { outcome: 'submitted', evidence: { source: 'platform_receipt', ...receipt, observed_at: new Date().toISOString(), meaning: '平台接受提交；不代表审核通过或已经公开发布' } };
     if (page.isClosed()) break;
     await page.waitForTimeout(Math.min(250, Math.max(1, deadline - Date.now()))).catch(() => {});
@@ -77,8 +79,10 @@ export async function verifySubmission(page, platformKey, { timeoutMs = 30_000, 
 export async function submitAndVerify(page, platform, beforeClick, options = {}) {
   const previous = await visibleReceipts(page, platform.key);
   const priorRecord = platform.key === 'channels' && await channelsScheduledReceipt(page, options.expected);
-  if (previous.length || priorRecord || (platform.key === 'channels' && page.url().split(/[?#]/)[0] === CHANNELS_LIST_URL)) throw new AppError('STALE_SUBMISSION_RECEIPT', '发布前页面已有成功回执或已在作品列表，需人工检查当前页面，未再次点击发布', { status: 409 });
   const context = options.context || {};
+  const onListPage = (platform.key === 'channels' && page.url().split(/[?#]/)[0] === CHANNELS_LIST_URL)
+    || (platform.key === 'douyin' && context.contentType === 'image_text' && isDouyinManagePage(page));
+  if (previous.length || priorRecord || onListPage) throw new AppError('STALE_SUBMISSION_RECEIPT', '发布前页面已有成功回执或已在作品列表，需人工检查当前页面，未再次点击发布', { status: 409 });
   if (platform.key === 'channels' && options.expected?.title && !options.expected.scheduledAt) {
     context.baseline = await captureChannelsBaseline(page, options.expected.title);
   }

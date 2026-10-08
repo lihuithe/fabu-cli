@@ -44,7 +44,12 @@ test('共享 Schema 拒绝未知参数，默认字段完整，平台能力不能
   const input = parseTask(inputFor());
   assert.deepEqual(input.content.topics, []);
   assert.throws(() => parseTask({ ...inputFor(), mistyped: true }), { code: 'INVALID_INPUT' });
-  assert.throws(() => normalizeTargets(parseTask({ ...inputFor(), action: 'submit', targets: [{ platform: 'xiaohongshu', account_id: 'a' }] }), accounts), { code: 'UNSUPPORTED_CAPABILITY' });
+  // 小红书已移除：平台枚举直接拒绝。
+  assert.throws(() => parseTask({ ...inputFor(), action: 'submit', targets: [{ platform: 'xiaohongshu', account_id: 'a' }] }), { code: 'INVALID_INPUT' });
+  // 图文 submit 只对抖音开放，快手/视频号/B站不能静默降级为 prepare。
+  const imageInput = targets => parseTask({ type: 'image_text', action: 'submit', media: { images: ['images:0'] }, content: { title: '图文' }, targets });
+  for (const platform of ['kuaishou', 'channels', 'bilibili']) assert.throws(() => normalizeTargets(imageInput([{ platform, account_id: 'a' }]), accounts), { code: 'UNSUPPORTED_CAPABILITY' });
+  assert.equal(normalizeTargets(imageInput([{ platform: 'douyin', account_id: 'a' }]), accounts)[0].directPublish, true);
   assert.throws(() => normalizeTargets(parseTask(inputFor('one', [{ platform: 'douyin', account_id: 'missing' }])), accounts), { code: 'LOGIN_EXPIRED' });
 });
 

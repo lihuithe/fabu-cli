@@ -41,7 +41,7 @@ test("服务可启动且健康接口返回四个平台", async () => {
   assert.equal(body.name, "Publish Ready");
   assert.equal(body.version, APP_VERSION);
   assert.equal(body.runtime, `node ${process.version}`);
-  assert.deepEqual(body.platforms, ["douyin", "xiaohongshu", "channels", "bilibili"]);
+  assert.deepEqual(body.platforms, ["douyin", "kuaishou", "channels", "bilibili"]);
 });
 
 test("账号 API 可读取迁移后的四个平台状态", async () => {
@@ -49,7 +49,7 @@ test("账号 API 可读取迁移后的四个平台状态", async () => {
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.success, true);
-  assert.deepEqual(Object.keys(body.accounts), ["douyin", "xiaohongshu", "channels", "bilibili"]);
+  assert.deepEqual(Object.keys(body.accounts), ["douyin", "kuaishou", "channels", "bilibili"]);
   assert.equal(Object.values(body.accounts).every(Array.isArray), true);
 });
 
@@ -771,7 +771,7 @@ test("图文任务明确拒绝B站目标", async () => {
   form.append("title", "测试标题");
   const response = await fetch(`http://127.0.0.1:${testPort}/api/image-text/tasks`, { method: "POST", body: form });
   assert.equal(response.status, 400);
-  assert.match((await response.json()).detail, /仅支持抖音、小红书和视频号/);
+  assert.match((await response.json()).detail, /仅支持抖音、快手和视频号/);
 });
 
 test("发布任务按平台和账号 ID 校验目标", async () => {

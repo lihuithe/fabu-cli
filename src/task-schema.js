@@ -38,7 +38,8 @@ export function parseTask(value) {
 export const CAPABILITIES = Object.fromEntries(Object.keys(PLATFORMS).map(key => [key, {
   name: PLATFORMS[key].name,
   video: { prepare: true, submit: true, submission_verification: 'visible_platform_receipt' },
-  image_text: { prepare: key !== 'bilibili', submit: false },
+  // 图文自动最终发布目前只对抖音开放；快手、视频号仍只支持 prepare。
+  image_text: key === 'douyin' ? { prepare: true, submit: true, submission_verification: 'visible_platform_receipt' } : { prepare: key !== 'bilibili', submit: false },
   title_limit: { douyin: 30, kuaishou: 30, channels: 100, bilibili: 80 }[key],
   title_required: key !== 'kuaishou',
   short_title_limit: key === 'channels' ? 16 : null,

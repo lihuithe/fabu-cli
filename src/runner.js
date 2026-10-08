@@ -3,7 +3,7 @@ import path from "node:path";
 import { chromium } from "playwright";
 import { bindingManager, chromePath, hasVisibleLoginPrompt, LOGIN_INVALID_MESSAGE } from "./account-binding.js";
 import { appendTopics, dismissKuaishouPublishGuide, fillFirst, findVideoInput, setChannelsLocationHidden, setChannelsOriginalIfAvailable, setPublishLocation, setRights, visibleFirst } from "./browser-utils.js";
-import { ChannelsVideoUploadMonitor, confirmDefaultCover, platformCoverSignature, uploadCovers, waitForPlatformCoverChange } from "./cover-handlers.js";
+import { ChannelsVideoUploadMonitor, confirmDefaultCover, platformCoverSignature, uploadCovers, waitDouyinVideoUploaded, waitForPlatformCoverChange } from "./cover-handlers.js";
 import { PLATFORMS } from "./platforms.js";
 import { normalizePlatformWindowError } from "./platform-window.js";
 import { setScheduledPublish } from "./schedule-publish.js";
@@ -231,10 +231,15 @@ export class SharedChromeRunner {
     if (job.useCustomCover) {
       this.#stage(job, "cover", "正在设置封面与内容声明");
       const before = await platformCoverSignature(page, platform.key);
-      await uploadCovers(page, job, platform, this.log);
+      const coverResult = await uploadCovers(page, job, platform, this.log);
       const coverVerifyTimeout = platform.key === "kuaishou" ? 12_000 : 8_000;
-      if (!(await waitForPlatformCoverChange(page, platform.key, before, coverVerifyTimeout))) throw new Error("平台自己的封面卡片未出现新预览，封面上传不算成功");
-      await this.#snapshot(page, job, "cover_verified");
+      if (platform.key === "douyin" && coverResult?.dialogConfirmed) {
+        // 抖音：弹窗已提示上传成功并关闭即视为封面已设置，不再等待页面封面卡片刷新（uploadDouyin 已记录结果/WARNING）。
+        if (!coverResult.previewVerified) job.coverPreviewUnverified = true;
+        await this.#snapshot(page, job, coverResult.previewVerified ? "cover_verified" : "cover_preview_unverified");
+      } else if (!(await waitForPlatformCoverChange(page, platform.key, before, coverVerifyTimeout))) {
+        throw new Error("平台自己的封面卡片未出现新预览，封面上传不算成功");
+      } else await this.#snapshot(page, job, "cover_verified");
     } else if (platform.key === "kuaishou") {
       this.#stage(job, "cover", "未上传封面，使用快手自动推荐封面");
       this.log(`[${platform.name}/${job.account}] 本次未上传封面，已跳过设置封面`);
@@ -270,6 +275,11 @@ export class SharedChromeRunner {
     }
     if (job.directPublish) {
       this.#throwIfCancelled();
+      if (platform.key === "douyin") {
+        this.#stage(job, "publishing", "等待抖音视频上传完成后再点击发布");
+        await waitDouyinVideoUploaded(page, job, platform, this.log, 900_000, "点击发布");
+        this.#throwIfCancelled();
+      }
       job.submissionContext = {};
       this.#stage(job, "publishing", `正在准备${platform.name}提交及结果核验`);
       job.submissionResult = await submitAndVerify(page, platform, () => {
