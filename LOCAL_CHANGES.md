@@ -31,7 +31,7 @@
   "media": { "images": ["/absolute/path/to/1.png", "/absolute/path/to/2.jpg"] },
   "content": { "title": "图文标题（≤30字）", "description": "图文正文", "topics": ["AI", "效率工具"] },
   "targets": [
-    { "platform": "douyin", "account_id": "replace-with-account-id", "declaration": "内容由AI生成" }
+    { "platform": "douyin", "account_id": "replace-with-account-id", "declaration": "内容由AI生成", "bgm": "random" }
   ],
   "close_after_submit": true
 }
@@ -63,6 +63,24 @@
   封面那一步抛错，后面的声明步骤根本没有执行。
 - 加固（`src/browser-utils.js` `setDouyinDeclaration`）：在弹窗点“确定”并关闭后，要求页面上的声明框文字已经不是占位符
   “请选择自主声明”（最多等 3 秒）。仍是占位符时报错 `抖音声明同步失败`，不会再误报“已填写”。如果已经显示目标声明，就不再重复打开弹窗。
+
+## 4. 抖音图文背景音乐（BGM，2026-10-09）
+
+- 原因：抖音图文发布后没有背景音乐，是静音的。
+- 配置：target 新增字段 `bgm: "random" | "none"`，只能用于**抖音图文**；默认是 `random`。在其他平台或视频任务上填写会返回 `UNSUPPORTED_CAPABILITY`。
+  `fabu capabilities --json` 里抖音的 `image_text.bgm = ["random","none"]`。
+- 流程（`src/douyin-bgm.js`，由 `src/image-text-runner.js` 在声明和定时设置之后、保存登录态和点击发布之前调用；prepare 和 submit 都会执行）：
+  1. 点击“选择音乐”。选择器依次尝试：`//div[@class="container-right-uW7Pj1"]` → `[class*="container-right-uW7Pj1"]` → 含“选择音乐”文字的 `container-right` → `span[class*=action]` 文字“选择音乐”。
+  2. 等待抽屉里的列表出现：`div.music-collection-container-cTsB7J` / `[class*="music-collection-container"]`。
+  3. 随机取 1–10 中的一个序号 N。卡片定位优先用 class 词 `card-container-tmocjc` 的 XPath（选中后多出 active class 也能匹配），其次 `[class*="card-container-tmocjc"]`。
+     列表是懒加载的，所以会把列表滚到底部，最多等 8 秒凑够 N 张；不够时选已加载的最后一张。
+  4. 把第 N 张卡片滚动到可见区域，`hover()` 后等待卡片内的“使用”按钮出现（`.//button[contains(@class,"apply-btn")]` / `[class*="apply-btn"]` / `button:has-text("使用")`），然后点击。
+     如果按钮不可见或点击被遮挡，就重新悬停并强制点击。**不会点击卡片本身**，那样只会试听。
+  5. 验证：等待抽屉关闭，最多 4 秒；仍然开着就点击 ×（`.semi-sidesheet-close` 等），再不行按 Esc，这样也会停止试听。
+     然后读取“选择音乐”所在行的文字：包含歌名记为 `selected`；读不到行文字但抽屉已关闭，记为 `selected_unverified`；
+     仍显示“点击添加合适作品风格音乐”则判为失败。日志会记录序号、歌名和作者。
+  6. 任何一步失败都只写 `WARNING：背景音乐选择失败…` 日志，保存 `bgm_warning_douyin.png/html`，并关闭抽屉，然后继续准备或发布。
+- 已知问题（上一次真实发布中发现，**本次未处理**）：抖音图文上传 PNG 失败，JPG 正常；目前建议使用 JPG。
 
 ## 测试
 

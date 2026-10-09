@@ -8,6 +8,7 @@ import { channelsImageTextContent, IMAGE_TEXT_PLATFORMS, kuaishouImageTextConten
 import { createPlatformWindowCloseGuard, normalizePlatformWindowError } from "./platform-window.js";
 import { setScheduledPublish } from "./schedule-publish.js";
 import { submitAndVerify, verifySubmission } from "./submission.js";
+import { selectDouyinBgm } from "./douyin-bgm.js";
 
 // 图文自动最终发布目前只对抖音开放（与 task-schema 的能力表一致）；其他平台即便收到 submit 也拒绝点击。
 export const IMAGE_TEXT_SUBMIT_PLATFORMS = Object.freeze(["douyin"]);
@@ -489,6 +490,16 @@ export class ImageTextChromeRunner {
         this.#stage(job, "scheduling", `正在选择定时发布时间：${job.scheduledAt.replace("T", " ")}`);
         await setScheduledPublish(page, platform, job.scheduledAt, message => this.log(`[${platform.name}/${job.account}] ${message}`), { timezone: 'Asia/Shanghai' });
         await this.#snapshot(page, job, "image_text_schedule_verified");
+      }
+      if (platform.key === "douyin") {
+        // 背景音乐尽力而为：selectDouyinBgm 内部吞掉所有错误，只记录 WARNING 并保存截图，不阻塞发布。
+        this.#throwIfCancelled();
+        this.#stage(job, "bgm", job.bgm === "none" ? "按任务设置不添加背景音乐" : "正在随机选择背景音乐");
+        job.bgmResult = await selectDouyinBgm(page, {
+          mode: job.bgm || "random",
+          log: message => this.log(`[${platform.name}/${job.account}] ${message}`),
+          snapshot: prefix => this.#snapshot(page, job, prefix)
+        });
       }
       await this.#saveLoginState(context, platform, job);
       await this.#snapshot(page, job, "image_text_ready");

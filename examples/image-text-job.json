@@ -15,7 +15,8 @@
     {
       "platform": "douyin",
       "account_id": "replace-with-account-id",
-      "declaration": "内容由AI生成"
+      "declaration": "内容由AI生成",
+      "bgm": "random"
     }
   ]
 }

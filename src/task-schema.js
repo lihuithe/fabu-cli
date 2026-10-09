@@ -9,7 +9,9 @@ const text = z.string().trim();
 const targetSchema = z.object({
   platform, account_id: text.min(1).max(100).regex(/^[A-Za-z0-9_-]+$/), action: action.optional(), title: text.optional(),
   short_title: text.optional(), declaration: text.optional(), original: z.boolean().optional(),
-  hide_location: z.boolean().optional(), location: text.max(100).optional(), scheduled_at: text.optional()
+  hide_location: z.boolean().optional(), location: text.max(100).optional(), scheduled_at: text.optional(),
+  // 仅抖音图文：random（默认）在发布前随机选择推荐列表前 10 首之一作为背景音乐；none 不添加。
+  bgm: z.enum(['random', 'none']).optional()
 }).strict();
 export const taskSchema = z.object({
   schema_version: z.literal(1).default(1), idempotency_key: text.min(1).max(200).optional(),
@@ -39,7 +41,7 @@ export const CAPABILITIES = Object.fromEntries(Object.keys(PLATFORMS).map(key =>
   name: PLATFORMS[key].name,
   video: { prepare: true, submit: true, submission_verification: 'visible_platform_receipt' },
   // 图文自动最终发布目前只对抖音开放；快手、视频号仍只支持 prepare。
-  image_text: key === 'douyin' ? { prepare: true, submit: true, submission_verification: 'visible_platform_receipt' } : { prepare: key !== 'bilibili', submit: false },
+  image_text: key === 'douyin' ? { prepare: true, submit: true, submission_verification: 'visible_platform_receipt', bgm: ['random', 'none'], bgm_default: 'random' } : { prepare: key !== 'bilibili', submit: false },
   title_limit: { douyin: 30, kuaishou: 30, channels: 100, bilibili: 80 }[key],
   title_required: key !== 'kuaishou',
   short_title_limit: key === 'channels' ? 16 : null,
@@ -82,6 +84,7 @@ export function normalizeTargets(input, accounts, dimensions = { width: 0, heigh
     const declaration = key === 'kuaishou' ? normalizeDeclaration(key, target.declaration) : target.declaration ?? DECLARATION_OPTIONS[key][0];
     if (!(key === 'kuaishou' && !declaration) && !DECLARATION_OPTIONS[key].includes(declaration)) throw new AppError('INVALID_DECLARATION', `${PLATFORMS[key].name}声明选项无效`);
     if (target.short_title && key !== 'channels' || target.hide_location && key !== 'channels' || target.original && key !== 'channels' || target.location && (key === 'bilibili' || input.type === 'image_text')) throw new AppError('UNSUPPORTED_CAPABILITY', `${PLATFORMS[key].name}不支持本次提交的短标题、原创或位置选项`);
+    if (target.bgm && !(key === 'douyin' && input.type === 'image_text')) throw new AppError('UNSUPPORTED_CAPABILITY', '背景音乐（bgm）仅支持抖音图文', { details: { platform: key, type: input.type, field: 'bgm' } });
     const scheduledAt = normalizeSchedule(target.scheduled_at || input.schedule?.at, key, now);
     const ratios = key === 'channels' ? channelsCoverRatios(dimensions.width, dimensions.height) : PLATFORMS[key].coverRatios;
     const cover = coverSetStatus(ratios, Object.keys(input.media.covers));
@@ -92,7 +95,7 @@ export function normalizeTargets(input, accounts, dimensions = { width: 0, heigh
       title, shortTitle: key === 'channels' ? short.value : '', content: input.content.description,
       topics: mergeTopics(input.content.fixed_topic, input.content.topics), declaration, original: false,
       channelsOriginal: key === 'channels' && Boolean(target.original), channelsHideLocation: key === 'channels' && Boolean(target.hide_location),
-      location: target.location || '', scheduledAt, action: mode, directPublish: mode === 'submit', closeAfterSubmit: input.close_after_submit,
+      location: target.location || '', bgm: key === 'douyin' && input.type === 'image_text' ? target.bgm ?? 'random' : 'none', scheduledAt, action: mode, directPublish: mode === 'submit', closeAfterSubmit: input.close_after_submit,
       videoWidth: dimensions.width, videoHeight: dimensions.height, coverRatio: '', useCustomCover: cover.mode === 'custom'
     };
   });

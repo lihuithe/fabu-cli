@@ -298,3 +298,151 @@ test("抖音图文点击后没有明确回执时返回待核实，绝不自动�
     assert.equal(await page.evaluate(() => window.clicks), 1);
   });
 });
+
+// ---- 抖音图文背景音乐（本地改动）----
+import { pickBgmIndex, selectDouyinBgm } from "../src/douyin-bgm.js";
+
+test("bgm 字段仅用于抖音图文，默认 random，可设为 none", () => {
+  const [byDefault] = normalizeTargets(imageTask({ platform: "douyin", account_id: "a" }), accounts);
+  assert.equal(byDefault.bgm, "random");
+  const [none] = normalizeTargets(imageTask({ platform: "douyin", account_id: "a", bgm: "none" }), accounts);
+  assert.equal(none.bgm, "none");
+  assert.deepEqual(CAPABILITIES.douyin.image_text.bgm, ["random", "none"]);
+  assert.throws(() => normalizeTargets(imageTask({ platform: "kuaishou", account_id: "a", action: "prepare", bgm: "random" }), accounts), { code: "UNSUPPORTED_CAPABILITY" });
+  assert.throws(() => imageTask({ platform: "douyin", account_id: "a", bgm: "loud" }), { code: "INVALID_INPUT" });
+  const video = parseTask({ type: "video", media: { video: "v.mp4" }, content: { title: "视频" }, targets: [{ platform: "douyin", account_id: "a", bgm: "none" }] });
+  assert.throws(() => normalizeTargets(video, accounts), { code: "UNSUPPORTED_CAPABILITY" });
+  const [kuaishou] = normalizeTargets(imageTask({ platform: "kuaishou", account_id: "a", action: "prepare" }), accounts);
+  assert.equal(kuaishou.bgm, "none");
+});
+
+test("随机序号在 1 到 10 之间", () => {
+  assert.equal(pickBgmIndex(() => 0), 1);
+  assert.equal(pickBgmIndex(() => 0.999999), 10);
+  assert.equal(pickBgmIndex(() => 0.25), 3);
+  for (let i = 0; i < 200; i += 1) { const n = pickBgmIndex(); assert.ok(n >= 1 && n <= 10); }
+});
+
+function bgmFixture({ initial = 12, total = 12, applyWorks = true, closeOnApply = true, trigger = true } = {}) {
+  return `
+    <style>
+      .apply-btn-LUPP0D { display: none; }
+      .card-container-tmocjc:hover .apply-btn-LUPP0D { display: inline-block; }
+      .music-collection-container-cTsB7J { height: 300px; overflow-y: auto; }
+      .card-container-tmocjc { min-height: 60px; }
+    </style>
+    <div class="extend-info"><div class="music-row"><span class="label">选择音乐</span><div class="value"><span id="row-value">点击添加合适作品风格音乐</span>
+      ${trigger ? '<div class="container-right-uW7Pj1"><svg width="10" height="10"></svg><span class="action-Q1y01k">选择音乐</span></div>' : ""}</div></div></div>
+    <button>发布</button>
+    <div id="drawer" class="semi-sidesheet" style="display:none"><div class="semi-sidesheet-title">选择音乐</div><button class="semi-sidesheet-close" aria-label="close">×</button>
+      <input placeholder="搜索音乐"><div class="tabs"><span>推荐</span><span>热门榜</span><span>收藏</span><span>飙升榜</span><span>原创榜</span></div>
+      <div class="music-collection-container-cTsB7J"></div></div>
+    <script>
+      window.bgm = { previews: [], applied: [], opened: 0, closed: 0 };
+      const drawer = document.getElementById('drawer');
+      const list = drawer.querySelector('.music-collection-container-cTsB7J');
+      let rendered = 0;
+      const render = upTo => {
+        for (; rendered < Math.min(upTo, ${total}); rendered++) {
+          const n = rendered + 1;
+          const card = document.createElement('div');
+          card.className = 'card-container-tmocjc';
+          card.innerHTML = '<div class="card-wrapper-JTleG1"><div class="card-container-left-Sww1pX"><img><div class="song-name-oRge4d">歌曲' + n + '</div><div class="song-author">作者' + n + '</div><div class="song-duration">00:30</div></div>'
+            + '<div class="card-container-right-E291Fw"><div class="user-count-ZMh4uY">' + n + '万人使用</div><button class="semi-button semi-button-primary apply-btn-LUPP0D" type="button"><span class="semi-button-content">使用</span></button></div></div>';
+          card.addEventListener('click', event => { if (event.target.closest('button')) return; card.classList.add('card-container-active-MXJa5C'); window.bgm.previews.push(n); });
+          card.querySelector('button').addEventListener('click', () => {
+            window.bgm.applied.push(n);
+            if (${applyWorks}) document.getElementById('row-value').textContent = '歌曲' + n + ' - 作者' + n;
+            if (${closeOnApply}) drawer.style.display = 'none';
+          });
+          list.appendChild(card);
+        }
+        if (rendered < ${total}) { let l = list.querySelector('.loading-container-KdV790'); if (!l) { l = document.createElement('div'); l.className = 'loading-container-KdV790'; l.textContent = '加载中'; } list.appendChild(l); }
+        else list.querySelector('.loading-container-KdV790')?.remove();
+      };
+      list.addEventListener('scroll', () => { if (list.scrollTop + list.clientHeight >= list.scrollHeight - 5) setTimeout(() => render(rendered + 3), 100); });
+      const opener = document.querySelector('.container-right-uW7Pj1');
+      if (opener) opener.onclick = () => { drawer.style.display = 'block'; window.bgm.opened++; if (!rendered) setTimeout(() => render(${initial}), 200); };
+      drawer.querySelector('.semi-sidesheet-close').onclick = () => { drawer.style.display = 'none'; window.bgm.closed++; };
+    </script>`;
+}
+
+async function withBgmPage(html, callback) {
+  const browser = await chromium.launch({ executablePath: chromePath(), headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+    await page.setContent(html);
+    await callback(page);
+  } finally {
+    await browser.close();
+  }
+}
+
+test("抖音 BGM：打开抽屉，悬停后点击第 N 首的“使用”，音乐行显示歌名且抽屉关闭", async () => {
+  await withBgmPage(bgmFixture(), async page => {
+    const logs = [];
+    const result = await selectDouyinBgm(page, { random: () => 0.25, log: message => logs.push(message) });
+    assert.deepEqual(result, { status: "selected", song: "歌曲3", author: "作者3", index: 3 });
+    const state = await page.evaluate(() => window.bgm);
+    assert.deepEqual(state.applied, [3]);
+    assert.deepEqual(state.previews, [], "只点“使用”，不点卡片本身试听");
+    assert.equal(await page.locator("#drawer").isVisible(), false);
+    assert.equal(await page.locator("#row-value").innerText(), "歌曲3 - 作者3");
+    assert.ok(logs.some(message => message.includes("歌曲3") && message.includes("作者3")));
+  });
+});
+
+test("抖音 BGM：列表懒加载时滚动加载到足够数量再选；卡片总数不足时取最后一首", async () => {
+  await withBgmPage(bgmFixture({ initial: 4, total: 12 }), async page => {
+    const result = await selectDouyinBgm(page, { random: () => 0.95, log: () => {} });
+    assert.equal(result.status, "selected");
+    assert.equal(result.index, 10);
+    assert.equal(result.song, "歌曲10");
+  });
+  await withBgmPage(bgmFixture({ initial: 5, total: 5 }), async page => {
+    const result = await selectDouyinBgm(page, { random: () => 0.95, log: () => {}, timeouts: { cards: 1_500 } });
+    assert.equal(result.status, "selected");
+    assert.equal(result.index, 5);
+  });
+});
+
+test("抖音 BGM：点击“使用”后抽屉仍开着时用 × 关闭", async () => {
+  await withBgmPage(bgmFixture({ closeOnApply: false }), async page => {
+    const result = await selectDouyinBgm(page, { random: () => 0, log: () => {}, timeouts: { close: 500 } });
+    assert.equal(result.status, "selected");
+    assert.equal(await page.evaluate(() => window.bgm.closed), 1);
+    assert.equal(await page.locator("#drawer").isVisible(), false);
+  });
+});
+
+test("抖音 BGM 失败只记录 WARNING、保存截图并关闭抽屉，不抛错", async () => {
+  await withBgmPage(bgmFixture({ trigger: false }), async page => {
+    const logs = [];
+    const shots = [];
+    const result = await selectDouyinBgm(page, { log: message => logs.push(message), snapshot: async prefix => shots.push(prefix) });
+    assert.equal(result.status, "failed");
+    assert.ok(logs.some(message => message.startsWith("WARNING") && message.includes("选择音乐")));
+    assert.deepEqual(shots, ["bgm_warning"]);
+  });
+  await withBgmPage(bgmFixture({ applyWorks: false, closeOnApply: false }), async page => {
+    const logs = [];
+    const result = await selectDouyinBgm(page, { random: () => 0, log: message => logs.push(message), timeouts: { close: 300 } });
+    assert.equal(result.status, "failed");
+    assert.match(result.reason, /占位提示/);
+    assert.equal(await page.locator("#drawer").isVisible(), false);
+    assert.ok(logs.some(message => message.startsWith("WARNING")));
+  });
+  await withBgmPage(bgmFixture({ initial: 0, total: 0 }), async page => {
+    const result = await selectDouyinBgm(page, { log: () => {}, timeouts: { cards: 800 } });
+    assert.equal(result.status, "failed");
+    assert.equal(await page.locator("#drawer").isVisible(), false, "失败时关闭抽屉，停止试听");
+  });
+});
+
+test("抖音 BGM 设为 none 时不打开抽屉", async () => {
+  await withBgmPage(bgmFixture(), async page => {
+    const result = await selectDouyinBgm(page, { mode: "none", log: () => {} });
+    assert.equal(result.status, "skipped");
+    assert.equal(await page.evaluate(() => window.bgm.opened), 0);
+  });
+});

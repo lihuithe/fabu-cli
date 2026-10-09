@@ -132,7 +132,7 @@ fabu tasks wait TASK_ID --timeout 600 --json
 - 视频支持 MP4、MOV、AVI、MKV、WebM，单文件最大 20 GiB；图文最多 18 张，每张不超过 30 MiB，支持 JPG、JPEG、PNG、WebP。平台的实际账号限制仍以平台页面为准。
 - 自定义视频封面放在 `media.covers`：键为 `3:4`、`4:3`、`16:9`，值为路径；各平台所需封面必须整套上传，也可以全部省略使用平台默认封面。
 - `content` 支持通用 `title`、`description`、`topics` 数组和 `fixed_topic`。
-- `targets` 支持独立 `title`、`action`、`declaration`、`scheduled_at`。视频号支持 `original`、`short_title`、`hide_location`；支持位置搜索的视频平台可设置 `location`。
+- `targets` 支持独立 `title`、`action`、`declaration`、`scheduled_at`。抖音图文还支持 `bgm`：`random`（默认，在推荐列表前 10 首中随机选一首作为背景音乐）或 `none`（不加音乐）；其他平台或视频任务填写 `bgm` 会被拒绝。选择音乐是尽力而为的步骤，失败时只记录 WARNING 并保存 `bgm_warning_douyin.png/html`，不会阻止准备或发布。视频号支持 `original`、`short_title`、`hide_location`；支持位置搜索的视频平台可设置 `location`。
 - `action` 默认 `prepare`，目标上的 `action` 可覆盖通用设置。不支持的能力返回错误，不会静默降级。
 - `close_after_submit` 默认 `true`，仅对已确认提交的任务生效。准备或失败现场仍保留，直到手动关闭窗口或执行 `close-windows`。
 - `schedule.at` 和目标 `scheduled_at` 必须携带明确时区，精度为整分钟，例如 `2026-09-06T12:00:00+08:00`。服务转换为平台的 `Asia/Shanghai` 时间。Web 表单传入浏览器时区，再做同样转换。
