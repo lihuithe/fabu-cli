@@ -82,14 +82,33 @@ export async function dismissKuaishouPublishGuide(page, timeoutMs = 250) {
   return !(await skip.count());
 }
 
+// 平台可能静默恢复上次未发布的编辑内容；macOS 上 Control+A 不是全选，必须用 ControlOrMeta+A，
+// 清完再确认编辑器为空，否则用 DOM 选区选中全部内容后删除，避免新内容接在旧内容后面。
+async function clearEditor(page, editor) {
+  const editorText = () => editor.evaluate(element => String(element.innerText ?? element.value ?? "").replace(/[ ​\s]/g, ""), undefined, { timeout: 1_000 }).catch(() => "");
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.press("Backspace");
+  for (let attempt = 0; attempt < 3 && await editorText(); attempt += 1) {
+    await editor.evaluate(element => {
+      element.focus();
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }, undefined, { timeout: 1_000 }).catch(() => {});
+    await page.keyboard.press("Backspace");
+    await page.waitForTimeout(80);
+  }
+}
+
 export async function fillFirst(page, selectors, value, typeOnly = false) {
   if (!value) return true;
   const item = await visibleFirst(page, selectors);
   if (!item) return false;
   if (typeOnly) {
     await focusEditorEnd(page, item);
-    await page.keyboard.press("Control+A");
-    await page.keyboard.press("Backspace");
+    await clearEditor(page, item);
     for (const [index, line] of String(value).split("\n").entries()) {
       if (index) await page.keyboard.press("Enter");
       if (line) await page.keyboard.type(line, { delay: 12 });

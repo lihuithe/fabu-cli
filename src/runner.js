@@ -3,7 +3,7 @@ import path from "node:path";
 import { chromium } from "playwright";
 import { bindingManager, chromePath, hasVisibleLoginPrompt, LOGIN_INVALID_MESSAGE } from "./account-binding.js";
 import { appendTopics, dismissKuaishouPublishGuide, fillFirst, findVideoInput, setChannelsLocationHidden, setChannelsOriginalIfAvailable, setPublishLocation, setRights, visibleFirst } from "./browser-utils.js";
-import { ChannelsVideoUploadMonitor, confirmDefaultCover, platformCoverSignature, uploadCovers, waitDouyinVideoUploaded, waitForPlatformCoverChange } from "./cover-handlers.js";
+import { ChannelsVideoUploadMonitor, confirmDefaultCover, platformCoverSignature, uploadCovers, waitDouyinVideoUploaded, waitForPlatformCoverChange, waitKuaishouVideoUploaded } from "./cover-handlers.js";
 import { PLATFORMS } from "./platforms.js";
 import { normalizePlatformWindowError } from "./platform-window.js";
 import { setScheduledPublish } from "./schedule-publish.js";
@@ -283,6 +283,11 @@ export class SharedChromeRunner {
       if (platform.key === "douyin") {
         this.#stage(job, "publishing", "等待抖音视频上传完成后再点击发布");
         await waitDouyinVideoUploaded(page, job, platform, this.log, 900_000, "点击发布");
+        this.#throwIfCancelled();
+      }
+      if (platform.key === "kuaishou") {
+        this.#stage(job, "publishing", "等待快手视频上传完成后再点击发布");
+        await waitKuaishouVideoUploaded(page, job, platform, this.log, 900_000, "点击发布");
         this.#throwIfCancelled();
       }
       job.submissionContext = {};

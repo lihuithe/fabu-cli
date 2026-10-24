@@ -79,6 +79,44 @@ export async function waitDouyinVideoUploaded(page, job, platform, log, timeoutM
   throw new CoverUploadError("等待抖音视频上传完成超时");
 }
 
+// 快手上传中：预览区 _phone-item 里有 .ant-progress（可能长时间停在 99%）和「上传中」标签；
+// 完成后变成 _preview-video 里的 <video>。「重新上传」在上传中就已出现，不能作为完成标志；
+// 上传中「发布」按钮也不置灰，过早点击会被平台弹窗「请在视频上传完成后再点击发布」拦下。
+async function kuaishouVideoUploadState(page) {
+  return page.evaluate(() => {
+    const visible = element => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden";
+    const label = Array.from(document.querySelectorAll('[class*="_phone-label"]')).filter(visible).map(element => element.textContent.trim()).join(" ");
+    const progress = Array.from(document.querySelectorAll('[class*="_phone-item"] .ant-progress')).filter(visible)
+      .map(element => String(element.querySelector(".ant-progress-text")?.textContent || "").trim());
+    const uploading = progress.length > 0 || /上传中|处理中|转码中/.test(label) || /正在上传|视频上传中/.test(document.body?.innerText || "");
+    const done = Array.from(document.querySelectorAll('[class*="_preview-video"] video')).some(visible);
+    return { uploading, done, progress: progress[0] || "", label };
+  }).catch(() => null);
+}
+
+export async function waitKuaishouVideoUploaded(page, job, platform, log, timeoutMs = 900_000, next = "点击发布") {
+  const deadline = Date.now() + timeoutMs;
+  let lastLog = 0;
+  let neitherSince = 0;
+  while (Date.now() < deadline) {
+    if (page.isClosed()) throw new CoverUploadError("浏览器已关闭");
+    const error = await visibleUploadError(page);
+    if (error) throw new CoverUploadError(error);
+    const state = await kuaishouVideoUploadState(page);
+    if (state?.done && !state.uploading) { log(`[${platform.name}/${job.account}] 快手视频已上传完成，开始${next}`); return; }
+    if (state && !state.done && !state.uploading) {
+      neitherSince ||= Date.now();
+      if (Date.now() - neitherSince > 30_000) { log(`[${platform.name}/${job.account}] 未识别到快手上传进度/预览视频标识，继续${next}`); return; }
+    } else neitherSince = 0;
+    if (Date.now() - lastLog > 15_000) {
+      log(`[${platform.name}/${job.account}] 等待快手视频上传完成后再${next}…${state?.progress ? `（进度 ${state.progress}）` : ""}`);
+      lastLog = Date.now();
+    }
+    await page.waitForTimeout(500);
+  }
+  throw new CoverUploadError("等待快手视频上传完成超时");
+}
+
 async function uploadDouyin(page, job, platform, log) {
   const vertical = job.covers["3:4"];
   const horizontal = job.covers["4:3"];

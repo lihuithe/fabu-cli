@@ -1042,7 +1042,7 @@ async function selectKuaishouTimeColumn(page, dropdown, columnIndex, targetValue
 
 async function writeKuaishouScheduleInput(page, input, fullDatetime) {
   await input.click({ clickCount: 3, timeout: 3_000 }).catch(() => {});
-  await page.keyboard.press("Control+A").catch(() => {});
+  await page.keyboard.press("ControlOrMeta+A").catch(() => {});
   await page.waitForTimeout(80);
   try {
     await page.keyboard.type(fullDatetime, { delay: 20 });
