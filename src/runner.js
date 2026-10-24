@@ -232,14 +232,19 @@ export class SharedChromeRunner {
       this.#stage(job, "cover", "正在设置封面与内容声明");
       const before = await platformCoverSignature(page, platform.key);
       const coverResult = await uploadCovers(page, job, platform, this.log);
-      const coverVerifyTimeout = platform.key === "kuaishou" ? 12_000 : 8_000;
+      const coverVerifyTimeout = platform.key === "kuaishou" ? 30_000 : 8_000;
       if (platform.key === "douyin" && coverResult?.dialogConfirmed) {
         // 抖音：弹窗已提示上传成功并关闭即视为封面已设置，不再等待页面封面卡片刷新（uploadDouyin 已记录结果/WARNING）。
         if (!coverResult.previewVerified) job.coverPreviewUnverified = true;
         await this.#snapshot(page, job, coverResult.previewVerified ? "cover_verified" : "cover_preview_unverified");
-      } else if (!(await waitForPlatformCoverChange(page, platform.key, before, coverVerifyTimeout))) {
-        throw new Error("平台自己的封面卡片未出现新预览，封面上传不算成功");
-      } else await this.#snapshot(page, job, "cover_verified");
+      } else if (await waitForPlatformCoverChange(page, platform.key, before, coverVerifyTimeout)) {
+        await this.#snapshot(page, job, "cover_verified");
+      } else if (platform.key === "kuaishou" && coverResult?.dialogConfirmed) {
+        // 快手：封面弹窗已确认并关闭，页面封面卡片可能仍在「AI 封面生成中」，只记 WARNING 继续。
+        job.coverPreviewUnverified = true;
+        this.log(`[${platform.name}/${job.account}] WARNING：快手封面弹窗已确认关闭，页面封面卡片 ${coverVerifyTimeout / 1000} 秒内未刷新（可能仍在 AI 封面生成中），按已设置继续`);
+        await this.#snapshot(page, job, "cover_preview_unverified");
+      } else throw new Error("平台自己的封面卡片未出现新预览，封面上传不算成功");
     } else if (platform.key === "kuaishou") {
       this.#stage(job, "cover", "未上传封面，使用快手自动推荐封面");
       this.log(`[${platform.name}/${job.account}] 本次未上传封面，已跳过设置封面`);

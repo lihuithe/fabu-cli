@@ -588,12 +588,35 @@ async function findKuaishouCoverUploadInput(modal) {
     await scoped.waitFor({ state: "attached", timeout: 10_000 });
     return scoped;
   }
+  const page = modal.page();
+  // 已上传态：弹窗里已有图（_cutter-raw + 「清空上传」），没有「上传图片」按钮；先清空回到空态再上传本次封面。
+  const clear = modal.locator('[class*="_cropper-upload-clear"]').filter({ hasText: /清空上传/ }).first();
+  if (await clear.isVisible().catch(() => false)) {
+    await safeClick(clear, "清空快手弹窗里已有的封面", { timeout: 3_000 });
+    await page.waitForTimeout(400);
+    if (await scoped.count()) return scoped;
+  }
   const uploadButton = modal.locator('button[class*="_upload-btn"]').filter({ hasText: /^上传图片$/ }).first();
-  await uploadButton.waitFor({ state: "visible", timeout: 10_000 });
-  await safeClick(uploadButton, "打开快手封面文件选择");
-  const fallback = modal.locator('input[type="file"][accept*="image"], input[type="file"]').first();
-  await fallback.waitFor({ state: "attached", timeout: 10_000 });
-  return fallback;
+  if (await uploadButton.waitFor({ state: "visible", timeout: 5_000 }).then(() => true, () => false)) {
+    const chooserPromise = page.waitForEvent("filechooser", { timeout: 3_000 }).catch(() => null);
+    await safeClick(uploadButton, "打开快手封面文件选择", { timeout: 3_000 });
+    const chooser = await chooserPromise;
+    if (chooser) return { setInputFiles: files => chooser.setFiles(files) };
+  }
+  // 新版图片 input 在页面级（紧挨 _high-cover-editor，不在 .ant-modal-content 里）。
+  const candidates = [
+    modal.locator('input[type="file"][accept*="image"], input[type="file"]'),
+    page.locator('input[type="file"][accept*="image"]:has(+ [class*="_high-cover-editor"])'),
+    page.locator('input[type="file"][accept*="image"]')
+  ];
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    for (const candidate of candidates) {
+      if (await candidate.count()) return candidate.first();
+    }
+    await page.waitForTimeout(250);
+  }
+  throw new Error("快手封面弹窗未找到图片上传入口（无 _cropper-upload input / 上传图片按钮 / 页面级图片 input）");
 }
 
 async function waitForKuaishouCoverPreviewReady(modal, page, timeoutMs = 60_000) {
@@ -705,9 +728,11 @@ async function uploadKuaishou(page, job, platform, log) {
     await waitForKuaishouCoverPreviewReady(modal, page, 60_000);
     stage = "确认封面";
     await confirmKuaishouCoverModal(modal, page);
+    const dialogConfirmed = await modal.isHidden().catch(() => false);
     stage = "关闭默认封面应用提示";
     await waitAndDismissKuaishouCoverApplyPrompt(page, 5_000, message => log(`[${platform.name}/${job.account}] ${message}`));
     log(`[${platform.name}/${job.account}] 已上传并确认 3:4 封面`);
+    return { dialogConfirmed };
   } catch (error) { throw new CoverUploadError(`快手${stage}失败：${error.message}`); }
 }
 
@@ -729,7 +754,7 @@ const COVER_SIGNATURE_SELECTORS = {
   kuaishou: [
     '[class*="_high-cover-editor-main"] [class*="_default-cover"] img',
     '[class*="_default-cover"] img',
-    '[class*="cover"] img',
+    '[class*="cover"] img:not([src^="data:"])',
     "text=设置封面",
     "text=更换封面",
     "text=上传封面"
@@ -752,9 +777,22 @@ export async function platformCoverSignature(page, key) {
   return pieces.join("\n");
 }
 
+// 快手应用封面后会进入「AI 封面生成中」：_default-cover 里没有 img，只有 _cover-ai-loading 占位。
+async function isKuaishouCoverGenerating(page) {
+  const loading = page.locator('[class*="_cover-ai-loading"]');
+  for (let i = 0; i < Math.min(await loading.count().catch(() => 0), 4); i += 1) {
+    if (await loading.nth(i).isVisible().catch(() => false)) return true;
+  }
+  return false;
+}
+
 export async function waitForPlatformCoverChange(page, key, before, timeoutMs = 8_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (key === "kuaishou" && await isKuaishouCoverGenerating(page)) {
+      await page.waitForTimeout(350);
+      continue;
+    }
     const after = await platformCoverSignature(page, key);
     if (after && after !== before) return true;
     await page.waitForTimeout(350);
