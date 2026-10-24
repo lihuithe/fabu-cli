@@ -969,7 +969,7 @@ async function kuaishouPickerState(dropdown) {
       columns: element.querySelectorAll(".ant-picker-time-panel-column").length,
       header: String(element.querySelector(".ant-picker-time-panel .ant-picker-header-view")?.textContent || "").trim()
     };
-  }).catch(() => null);
+  }, undefined, { timeout: 1_000 }).catch(() => null);
 }
 
 function describeKuaishouPickerState(state) {
@@ -987,7 +987,7 @@ async function kuaishouTimeColumnMatchingIndexes(column, normalizedTarget) {
   const texts = await column.evaluate(element => Array.from(
     element.querySelectorAll(".ant-picker-time-panel-cell-inner"),
     option => String(option.textContent || "")
-  )).catch(() => []);
+  ), undefined, { timeout: 1_000 }).catch(() => []);
   return texts.flatMap((text, index) => wheelNumber(text) === normalizedTarget ? [index] : []);
 }
 
@@ -998,7 +998,7 @@ async function scrollKuaishouTimeOptionIntoView(option) {
     const column = cell.closest(".ant-picker-time-panel-column");
     if (!column) return;
     column.scrollTop = Math.max(0, cell.offsetTop - (column.clientHeight - cell.offsetHeight) / 2);
-  }).catch(() => {});
+  }, undefined, { timeout: 1_000 }).catch(() => {});
 }
 
 async function activateKuaishouTimeOption(page, column, option, normalizedTarget) {
@@ -1010,7 +1010,7 @@ async function activateKuaishouTimeOption(page, column, option, normalizedTarget
   await safeClick(target, "选择快手定时发布时间项", { timeout: 2_000 }).catch(() => {});
   await page.waitForTimeout(200);
   if (await isKuaishouTimeColumnSelected(column, normalizedTarget)) return true;
-  await target.evaluate(element => element.click()).catch(() => {});
+  await target.evaluate(element => element.click(), undefined, { timeout: 1_000 }).catch(() => {});
   await page.waitForTimeout(200);
   return isKuaishouTimeColumnSelected(column, normalizedTarget);
 }
